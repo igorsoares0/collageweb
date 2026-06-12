@@ -23,6 +23,11 @@ export async function importTemplateFile(
   } catch {
     return { error: "File is not valid JSON" };
   }
+  // Files exported before schemaVersion existed are schema 1 by definition.
+  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    obj.schemaVersion ??= 1;
+  }
   const result = validateTemplate(parsed);
   if (!result.valid) {
     return { error: `Invalid template: ${result.errors.join("; ")}` };

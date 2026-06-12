@@ -8,7 +8,9 @@ export async function GET() {
     return Response.json({ error: "DATABASE_URL not configured" }, { status: 503 });
   }
   const rows = await sql`
-    SELECT id, name, template_json->>'aspectRatio' AS "aspectRatio",
+    SELECT id, name,
+           COALESCE((template_json->>'schemaVersion')::int, 1) AS "schemaVersion",
+           template_json->>'aspectRatio' AS "aspectRatio",
            category, premium, thumbnail_url AS "thumbnailDataUrl",
            updated_at AS "updatedAt"
     FROM templates

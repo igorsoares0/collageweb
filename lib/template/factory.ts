@@ -1,3 +1,4 @@
+import { CURRENT_SCHEMA_VERSION } from "./types";
 import type { AspectRatio, Layer, LayerType, Template } from "./types";
 
 export const CANVAS_FORMATS: Record<
@@ -21,11 +22,21 @@ export const STICKER_ASSETS = [
 export function createTemplate(name = "Untitled Template"): Template {
   return {
     id: crypto.randomUUID(),
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     version: 0,
     name,
     aspectRatio: "story",
     canvas: { ...CANVAS_FORMATS.story },
     layers: [],
+  };
+}
+
+// Fills fields that older saved templates predate (schemaVersion shipped
+// after the first templates were persisted). Apply on every read path.
+export function normalizeTemplate(template: Template): Template {
+  return {
+    ...template,
+    schemaVersion: template.schemaVersion ?? 1,
   };
 }
 

@@ -13,6 +13,8 @@ export interface TemplateRecord {
 export interface TemplateSummary {
   id: string;
   name: string;
+  // Renderers (mobile sync) must skip entries above the schema they support.
+  schemaVersion: number;
   aspectRatio: AspectRatio;
   category?: Category;
   premium: boolean;

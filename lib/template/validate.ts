@@ -1,4 +1,5 @@
 import { CANVAS_FORMATS } from "./factory";
+import { CURRENT_SCHEMA_VERSION } from "./types";
 import type { AspectRatio, Template } from "./types";
 
 export interface ValidationResult {
@@ -51,6 +52,18 @@ export function validateTemplate(value: unknown): ValidationResult {
     value.version < 0
   ) {
     errors.push('"version" must be a non-negative integer');
+  }
+
+  if (
+    !isFiniteNumber(value.schemaVersion) ||
+    !Number.isInteger(value.schemaVersion) ||
+    value.schemaVersion < 1
+  ) {
+    errors.push('"schemaVersion" must be a positive integer');
+  } else if (value.schemaVersion > CURRENT_SCHEMA_VERSION) {
+    errors.push(
+      `"schemaVersion" ${value.schemaVersion} is newer than this editor supports (${CURRENT_SCHEMA_VERSION})`
+    );
   }
 
   if (

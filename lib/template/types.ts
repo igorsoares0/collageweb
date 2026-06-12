@@ -65,8 +65,16 @@ export interface StickerLayer extends BaseLayer {
 
 export type Layer = ImageLayer | TextLayer | ShapeLayer | StickerLayer;
 
+// Highest template schema this editor (and the current renderers) understand.
+// Bump ONLY when the JSON contract gains features old renderers can't draw;
+// clients must skip templates with schemaVersion above what they support.
+export const CURRENT_SCHEMA_VERSION = 1;
+
 export interface Template {
   id: string;
+  // Capability gate for renderers (see CURRENT_SCHEMA_VERSION).
+  schemaVersion: number;
+  // Content revision; increments on every publish (spec §22).
   version: number;
   name: string;
   aspectRatio: AspectRatio;

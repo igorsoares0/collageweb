@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { getRepository } from "@/lib/persistence/repository";
+import { normalizeTemplate } from "@/lib/template/factory";
 import { GOOGLE_FONTS_CSS_URL } from "@/lib/fonts";
 import Toolbar from "./Toolbar";
 import LayerTree from "./LayerTree";
@@ -58,7 +59,7 @@ export default function EditorShell({ id }: { id: string }) {
           setStatus("missing");
           return;
         }
-        loadTemplate(record.template);
+        loadTemplate(normalizeTemplate(record.template));
         setMeta({
           category: record.category,
           premium: record.premium,

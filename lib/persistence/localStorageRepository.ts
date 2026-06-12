@@ -24,6 +24,7 @@ function toSummary(record: TemplateRecord): TemplateSummary {
   return {
     id: record.template.id,
     name: record.template.name,
+    schemaVersion: record.template.schemaVersion ?? 1,
     aspectRatio: record.template.aspectRatio,
     category: record.category,
     premium: record.premium,
