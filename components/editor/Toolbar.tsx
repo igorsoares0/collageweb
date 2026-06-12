@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
-import { getRepository } from "@/lib/persistence/localStorageRepository";
+import { getRepository } from "@/lib/persistence/repository";
 import { validateTemplate } from "@/lib/template/validate";
 import { exportTemplate } from "@/lib/file-io";
 import { CANVAS_FORMATS } from "@/lib/template/factory";

@@ -32,7 +32,7 @@ function toSummary(record: TemplateRecord): TemplateSummary {
   };
 }
 
-class LocalStorageTemplateRepository implements TemplateRepository {
+export class LocalStorageTemplateRepository implements TemplateRepository {
   async list(): Promise<TemplateSummary[]> {
     return readIndex().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
@@ -61,11 +61,4 @@ class LocalStorageTemplateRepository implements TemplateRepository {
     localStorage.removeItem(RECORD_KEY_PREFIX + id);
     writeIndex(readIndex().filter((s) => s.id !== id));
   }
-}
-
-let repository: TemplateRepository | null = null;
-
-export function getRepository(): TemplateRepository {
-  repository ??= new LocalStorageTemplateRepository();
-  return repository;
 }

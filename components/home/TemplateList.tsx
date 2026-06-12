@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getRepository } from "@/lib/persistence/localStorageRepository";
+import { getRepository } from "@/lib/persistence/repository";
 import { createTemplate } from "@/lib/template/factory";
 import { importTemplateFile } from "@/lib/file-io";
 import type { TemplateSummary } from "@/lib/persistence/TemplateRepository";

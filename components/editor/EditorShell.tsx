@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
-import { getRepository } from "@/lib/persistence/localStorageRepository";
+import { getRepository } from "@/lib/persistence/repository";
 import { GOOGLE_FONTS_CSS_URL } from "@/lib/fonts";
 import Toolbar from "./Toolbar";
 import LayerTree from "./LayerTree";
