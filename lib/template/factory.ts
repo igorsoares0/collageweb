@@ -26,17 +26,22 @@ export function createTemplate(name = "Untitled Template"): Template {
     version: 0,
     name,
     aspectRatio: "story",
-    canvas: { ...CANVAS_FORMATS.story },
+    canvas: { ...CANVAS_FORMATS.story, backgroundColor: "#FFFFFF" },
     layers: [],
   };
 }
 
-// Fills fields that older saved templates predate (schemaVersion shipped
-// after the first templates were persisted). Apply on every read path.
+// Fills fields that older saved templates predate (schemaVersion and
+// canvas.backgroundColor both shipped after the first templates were
+// persisted). Apply on every read path.
 export function normalizeTemplate(template: Template): Template {
   return {
     ...template,
     schemaVersion: template.schemaVersion ?? 1,
+    canvas: {
+      ...template.canvas,
+      backgroundColor: template.canvas.backgroundColor ?? "#FFFFFF",
+    },
   };
 }
 

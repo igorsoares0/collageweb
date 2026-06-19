@@ -16,6 +16,7 @@ interface EditorState {
   loadTemplate: (template: Template) => void;
   setName: (name: string) => void;
   setFormat: (aspectRatio: AspectRatio) => void;
+  setBackgroundColor: (color: string) => void;
   addLayer: (type: LayerType) => void;
   updateLayer: (id: string, patch: Partial<Layer>) => void;
   removeLayer: (id: string) => void;
@@ -74,7 +75,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
         canvas: {
           width: CANVAS_FORMATS[aspectRatio].width,
           height: CANVAS_FORMATS[aspectRatio].height,
+          // Preserve the chosen background across format changes.
+          backgroundColor: t.canvas.backgroundColor,
         },
+      })),
+
+    setBackgroundColor: (backgroundColor) =>
+      mutateTemplate((t) => ({
+        ...t,
+        canvas: { ...t.canvas, backgroundColor },
       })),
 
     addLayer: (type) => {

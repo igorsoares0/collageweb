@@ -260,6 +260,25 @@ function LayerFields({ layer }: { layer: Layer }) {
   }
 }
 
+function CanvasFields() {
+  const template = useEditorStore((s) => s.template);
+  const setBackgroundColor = useEditorStore((s) => s.setBackgroundColor);
+  if (!template) return null;
+  return (
+    <>
+      <p className="text-xs text-zinc-500">Canvas</p>
+      <ColorField
+        label="Background"
+        value={template.canvas.backgroundColor ?? "#FFFFFF"}
+        onCommit={setBackgroundColor}
+      />
+      <p className="pt-2 text-center text-[11px] text-zinc-600">
+        Select a layer to edit its properties.
+      </p>
+    </>
+  );
+}
+
 export default function PropertiesPanel() {
   const template = useEditorStore((s) => s.template);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
@@ -274,13 +293,7 @@ export default function PropertiesPanel() {
         Properties
       </h2>
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
-        {layer ? (
-          <LayerFields key={layer.id} layer={layer} />
-        ) : (
-          <p className="py-6 text-center text-xs text-zinc-600">
-            Select a layer to edit its properties.
-          </p>
-        )}
+        {layer ? <LayerFields key={layer.id} layer={layer} /> : <CanvasFields />}
       </div>
       <div className="border-t border-zinc-800 px-3 py-2">
         <p className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1">

@@ -81,6 +81,9 @@ export interface Template {
   canvas: {
     width: number;
     height: number;
+    // Optional, defaults to white. Additive/back-compatible — old templates
+    // and renderers fall back to white, so no schemaVersion bump.
+    backgroundColor: string;
   };
   // Index 0 = bottom of the stack (Konva/Flutter render order).
   layers: Layer[];

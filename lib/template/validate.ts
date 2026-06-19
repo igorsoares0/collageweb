@@ -91,6 +91,12 @@ export function validateTemplate(value: unknown): ValidationResult {
     value.canvas.height <= 0
   ) {
     errors.push('"canvas" must have positive numeric width and height');
+  } else if (
+    value.canvas.backgroundColor !== undefined &&
+    !isNonEmptyString(value.canvas.backgroundColor)
+  ) {
+    // Optional (older templates predate it); must be a string when present.
+    errors.push('"canvas.backgroundColor" must be a non-empty string');
   }
 
   if (!Array.isArray(value.layers)) {

@@ -138,7 +138,7 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                 y={0}
                 width={template.canvas.width}
                 height={template.canvas.height}
-                fill="#FFFFFF"
+                fill={template.canvas.backgroundColor || "#FFFFFF"}
                 listening={false}
               />
               {template.layers.map((layer) => (
