@@ -9,6 +9,7 @@ import { normalizeTemplate } from "@/lib/template/factory";
 import { GOOGLE_FONTS_CSS_URL } from "@/lib/fonts";
 import Toolbar from "./Toolbar";
 import LayerTree from "./LayerTree";
+import PanelStrip from "./PanelStrip";
 import PropertiesPanel from "./PropertiesPanel";
 import type { Category } from "@/lib/template/types";
 
@@ -118,10 +119,13 @@ export default function EditorShell({ id }: { id: string }) {
       <Toolbar meta={meta} onMetaChange={setMeta} getThumbnail={getThumbnail} />
       <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)_280px]">
         <LayerTree />
-        <div className="min-h-0">
-          {status === "ready" && (
-            <CanvasStage registerThumbnail={registerThumbnail} />
-          )}
+        <div className="flex min-h-0 flex-col">
+          <div className="min-h-0 flex-1">
+            {status === "ready" && (
+              <CanvasStage registerThumbnail={registerThumbnail} />
+            )}
+          </div>
+          {status === "ready" && <PanelStrip />}
         </div>
         <PropertiesPanel />
       </div>

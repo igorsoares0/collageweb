@@ -6,7 +6,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { getRepository } from "@/lib/persistence/repository";
 import { validateTemplate } from "@/lib/template/validate";
 import { exportTemplate } from "@/lib/file-io";
-import { CANVAS_FORMATS } from "@/lib/template/factory";
+import { CANVAS_FORMATS, serializeTemplate } from "@/lib/template/factory";
 import { CATEGORIES, type AspectRatio, type Category, type LayerType } from "@/lib/template/types";
 import type { RecordMeta } from "./EditorShell";
 
@@ -44,14 +44,17 @@ export default function Toolbar({ meta, onMetaChange, getThumbnail }: Props) {
   const handleSave = async () => {
     // Version increments on every publish (spec §22).
     const candidate = { ...template, version: template.version + 1 };
-    const result = validateTemplate(candidate);
+    // Persist the wire shape (v1 for single panel, v2 for multi) and validate
+    // exactly what we store; the editor keeps the canonical panels form.
+    const wire = serializeTemplate(candidate);
+    const result = validateTemplate(wire);
     if (!result.valid) {
       setErrors(result.errors);
       return;
     }
     setErrors([]);
     await getRepository().save({
-      template: candidate,
+      template: wire as unknown as typeof candidate,
       category: meta.category,
       premium: meta.premium,
       thumbnailDataUrl: getThumbnail(),
@@ -62,7 +65,7 @@ export default function Toolbar({ meta, onMetaChange, getThumbnail }: Props) {
   };
 
   const handleExport = () => {
-    const result = validateTemplate(template);
+    const result = validateTemplate(serializeTemplate(template));
     if (!result.valid) {
       setErrors(result.errors);
       return;

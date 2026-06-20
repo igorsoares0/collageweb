@@ -1,13 +1,20 @@
 "use client";
 
 import { create } from "zustand";
-import { CANVAS_FORMATS, createLayer } from "@/lib/template/factory";
-import type { AspectRatio, Layer, LayerType, Template } from "@/lib/template/types";
+import { CANVAS_FORMATS, createLayer, createPanel } from "@/lib/template/factory";
+import type {
+  AspectRatio,
+  Layer,
+  LayerType,
+  Panel,
+  Template,
+} from "@/lib/template/types";
 
 const HISTORY_LIMIT = 50;
 
 interface EditorState {
   template: Template | null;
+  activePanelId: string | null;
   selectedLayerId: string | null;
   dirty: boolean;
   past: Template[];
@@ -24,10 +31,25 @@ interface EditorState {
   selectLayer: (id: string | null) => void;
   toggleLock: (id: string) => void;
   toggleHide: (id: string) => void;
+  // Panel (carousel slide) management.
+  selectPanel: (id: string) => void;
+  addPanel: () => void;
+  duplicatePanel: (id: string) => void;
+  removePanel: (id: string) => void;
+  reorderPanel: (id: string, direction: "left" | "right") => void;
   beginHistory: () => void;
   undo: () => void;
   redo: () => void;
   markSaved: (template: Template) => void;
+}
+
+// Fresh slotId not already used anywhere in the template (slotIds are global).
+function freshSlotId(taken: Set<string>, prefix: string): string {
+  let n = 1;
+  while (taken.has(`${prefix}_${n}`)) n++;
+  const id = `${prefix}_${n}`;
+  taken.add(id);
+  return id;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
@@ -50,8 +72,24 @@ export const useEditorStore = create<EditorState>((set, get) => {
     set({ template: fn(template), dirty: true });
   };
 
+  // Replace the active panel's layers/fields. Most editing actions are scoped
+  // to one panel; this keeps the rest of the carousel untouched.
+  const mutatePanel = (fn: (p: Panel) => Panel, withHistory = true) => {
+    const { activePanelId } = get();
+    mutateTemplate(
+      (t) => ({
+        ...t,
+        panels: t.panels.map((p) =>
+          p.id === (activePanelId ?? t.panels[0].id) ? fn(p) : p
+        ),
+      }),
+      withHistory
+    );
+  };
+
   return {
     template: null,
+    activePanelId: null,
     selectedLayerId: null,
     dirty: false,
     past: [],
@@ -60,6 +98,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     loadTemplate: (template) =>
       set({
         template: structuredClone(template),
+        activePanelId: template.panels[0]?.id ?? null,
         selectedLayerId: null,
         dirty: false,
         past: [],
@@ -75,32 +114,27 @@ export const useEditorStore = create<EditorState>((set, get) => {
         canvas: {
           width: CANVAS_FORMATS[aspectRatio].width,
           height: CANVAS_FORMATS[aspectRatio].height,
-          // Preserve the chosen background across format changes.
-          backgroundColor: t.canvas.backgroundColor,
         },
       })),
 
     setBackgroundColor: (backgroundColor) =>
-      mutateTemplate((t) => ({
-        ...t,
-        canvas: { ...t.canvas, backgroundColor },
-      })),
+      mutatePanel((p) => ({ ...p, backgroundColor })),
 
     addLayer: (type) => {
       const { template } = get();
       if (!template) return;
       const layer = createLayer(type, template);
-      mutateTemplate((t) => ({ ...t, layers: [...t.layers, layer] }));
+      mutatePanel((p) => ({ ...p, layers: [...p.layers, layer] }));
       set({ selectedLayerId: layer.id });
     },
 
     // No history push — used per-frame during drag/transform. Callers that
     // need an undo point call beginHistory() first.
     updateLayer: (id, patch) =>
-      mutateTemplate(
-        (t) => ({
-          ...t,
-          layers: t.layers.map((l) =>
+      mutatePanel(
+        (p) => ({
+          ...p,
+          layers: p.layers.map((l) =>
             l.id === id ? ({ ...l, ...patch } as Layer) : l
           ),
         }),
@@ -108,30 +142,27 @@ export const useEditorStore = create<EditorState>((set, get) => {
       ),
 
     removeLayer: (id) => {
-      mutateTemplate((t) => ({
-        ...t,
-        layers: t.layers.filter((l) => l.id !== id),
-      }));
+      mutatePanel((p) => ({ ...p, layers: p.layers.filter((l) => l.id !== id) }));
       if (get().selectedLayerId === id) set({ selectedLayerId: null });
     },
 
     reorderLayer: (id, direction) =>
-      mutateTemplate((t) => {
-        const index = t.layers.findIndex((l) => l.id === id);
+      mutatePanel((p) => {
+        const index = p.layers.findIndex((l) => l.id === id);
         // index 0 = bottom of the stack; "up" moves toward the front (end).
         const target = direction === "up" ? index + 1 : index - 1;
-        if (index < 0 || target < 0 || target >= t.layers.length) return t;
-        const layers = [...t.layers];
+        if (index < 0 || target < 0 || target >= p.layers.length) return p;
+        const layers = [...p.layers];
         [layers[index], layers[target]] = [layers[target], layers[index]];
-        return { ...t, layers };
+        return { ...p, layers };
       }),
 
     selectLayer: (id) => set({ selectedLayerId: id }),
 
     toggleLock: (id) =>
-      mutateTemplate((t) => ({
-        ...t,
-        layers: t.layers.map((l) =>
+      mutatePanel((p) => ({
+        ...p,
+        layers: p.layers.map((l) =>
           l.id === id
             ? { ...l, editor: { ...l.editor, locked: !l.editor?.locked } }
             : l
@@ -139,9 +170,9 @@ export const useEditorStore = create<EditorState>((set, get) => {
       })),
 
     toggleHide: (id) => {
-      mutateTemplate((t) => ({
-        ...t,
-        layers: t.layers.map((l) =>
+      mutatePanel((p) => ({
+        ...p,
+        layers: p.layers.map((l) =>
           l.id === id
             ? { ...l, editor: { ...l.editor, hidden: !l.editor?.hidden } }
             : l
@@ -150,6 +181,70 @@ export const useEditorStore = create<EditorState>((set, get) => {
       // Transformer can't attach to invisible nodes.
       if (get().selectedLayerId === id) set({ selectedLayerId: null });
     },
+
+    selectPanel: (id) => set({ activePanelId: id, selectedLayerId: null }),
+
+    addPanel: () => {
+      const panel = createPanel();
+      mutateTemplate((t) => ({ ...t, panels: [...t.panels, panel] }));
+      set({ activePanelId: panel.id, selectedLayerId: null });
+    },
+
+    duplicatePanel: (id) => {
+      const { template } = get();
+      if (!template) return;
+      const source = template.panels.find((p) => p.id === id);
+      if (!source) return;
+      // slotIds must stay unique across the template; regenerate them (and
+      // layer ids) for the copy so user content still binds per-slot.
+      const taken = new Set(
+        template.panels.flatMap((p) =>
+          p.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : []))
+        )
+      );
+      const copy: Panel = {
+        id: crypto.randomUUID(),
+        backgroundColor: source.backgroundColor,
+        layers: source.layers.map((l) => {
+          const cloned = { ...l, id: crypto.randomUUID() } as Layer;
+          if ("slotId" in cloned) {
+            const prefix = cloned.type === "image" ? "image" : "text";
+            cloned.slotId = freshSlotId(taken, prefix);
+          }
+          return cloned;
+        }),
+      };
+      mutateTemplate((t) => {
+        const index = t.panels.findIndex((p) => p.id === id);
+        const panels = [...t.panels];
+        panels.splice(index + 1, 0, copy);
+        return { ...t, panels };
+      });
+      set({ activePanelId: copy.id, selectedLayerId: null });
+    },
+
+    removePanel: (id) => {
+      const { template } = get();
+      if (!template || template.panels.length <= 1) return;
+      mutateTemplate((t) => ({
+        ...t,
+        panels: t.panels.filter((p) => p.id !== id),
+      }));
+      if (get().activePanelId === id) {
+        const remaining = get().template?.panels ?? [];
+        set({ activePanelId: remaining[0]?.id ?? null, selectedLayerId: null });
+      }
+    },
+
+    reorderPanel: (id, direction) =>
+      mutateTemplate((t) => {
+        const index = t.panels.findIndex((p) => p.id === id);
+        const target = direction === "right" ? index + 1 : index - 1;
+        if (index < 0 || target < 0 || target >= t.panels.length) return t;
+        const panels = [...t.panels];
+        [panels[index], panels[target]] = [panels[target], panels[index]];
+        return { ...t, panels };
+      }),
 
     beginHistory: pushHistory,
 
@@ -162,11 +257,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         past: past.slice(0, -1),
         future: [structuredClone(template), ...future],
         dirty: true,
-        selectedLayerId: previous.layers.some(
-          (l) => l.id === get().selectedLayerId
-        )
-          ? get().selectedLayerId
-          : null,
+        ...reconcileSelection(previous, get()),
       });
     },
 
@@ -179,9 +270,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         past: [...past, structuredClone(template)],
         future: future.slice(1),
         dirty: true,
-        selectedLayerId: next.layers.some((l) => l.id === get().selectedLayerId)
-          ? get().selectedLayerId
-          : null,
+        ...reconcileSelection(next, get()),
       });
     },
 
@@ -189,3 +278,21 @@ export const useEditorStore = create<EditorState>((set, get) => {
       set({ template: structuredClone(template), dirty: false }),
   };
 });
+
+// After undo/redo the restored template may not contain the active panel or
+// selected layer (a panel/layer add being undone). Snap both back to something
+// that exists so the canvas and panels strip stay consistent.
+function reconcileSelection(
+  template: Template,
+  state: { activePanelId: string | null; selectedLayerId: string | null }
+): { activePanelId: string | null; selectedLayerId: string | null } {
+  const panel =
+    template.panels.find((p) => p.id === state.activePanelId) ??
+    template.panels[0] ??
+    null;
+  const selectedLayerId =
+    panel && panel.layers.some((l) => l.id === state.selectedLayerId)
+      ? state.selectedLayerId
+      : null;
+  return { activePanelId: panel?.id ?? null, selectedLayerId };
+}

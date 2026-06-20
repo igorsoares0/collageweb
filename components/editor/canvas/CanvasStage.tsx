@@ -14,6 +14,7 @@ interface Props {
 
 export default function CanvasStage({ registerThumbnail }: Props) {
   const template = useEditorStore((s) => s.template);
+  const activePanelId = useEditorStore((s) => s.activePanelId);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const selectLayer = useEditorStore((s) => s.selectLayer);
 
@@ -63,7 +64,9 @@ export default function CanvasStage({ registerThumbnail }: Props) {
     });
   }, [registerThumbnail]);
 
-  const selectedLayer = template?.layers.find((l) => l.id === selectedLayerId);
+  const panel =
+    template?.panels.find((p) => p.id === activePanelId) ?? template?.panels[0];
+  const selectedLayer = panel?.layers.find((l) => l.id === selectedLayerId);
   const transformable =
     !!selectedLayer &&
     !selectedLayer.editor?.locked &&
@@ -81,7 +84,7 @@ export default function CanvasStage({ registerThumbnail }: Props) {
     transformer.nodes(node ? [node] : []);
   }, [selectedLayerId, transformable, template]);
 
-  if (!template) return null;
+  if (!template || !panel) return null;
 
   const scale =
     viewport.width > 0 && viewport.height > 0
@@ -138,10 +141,10 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                 y={0}
                 width={template.canvas.width}
                 height={template.canvas.height}
-                fill={template.canvas.backgroundColor || "#FFFFFF"}
+                fill={panel.backgroundColor || "#FFFFFF"}
                 listening={false}
               />
-              {template.layers.map((layer) => (
+              {panel.layers.map((layer) => (
                 <LayerNode key={layer.id} layer={layer} />
               ))}
             </KonvaLayer>

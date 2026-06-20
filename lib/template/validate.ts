@@ -99,16 +99,57 @@ export function validateTemplate(value: unknown): ValidationResult {
     errors.push('"canvas.backgroundColor" must be a non-empty string');
   }
 
-  if (!Array.isArray(value.layers)) {
-    errors.push('"layers" must be an array');
-    return { valid: errors.length === 0, errors };
-  }
-
+  // ids and slotIds are unique across the whole template (every panel shares
+  // one namespace, since the app keys user content by slotId globally).
   const layerIds = new Set<string>();
   const slotIds = new Set<string>();
 
-  value.layers.forEach((layer: unknown, i: number) => {
-    const label = `layers[${i}]`;
+  if (Array.isArray(value.panels)) {
+    // v2 multi-panel shape.
+    const panelIds = new Set<string>();
+    value.panels.forEach((panel: unknown, p: number) => {
+      const plabel = `panels[${p}]`;
+      if (!isRecord(panel)) {
+        errors.push(`${plabel}: must be an object`);
+        return;
+      }
+      if (!isNonEmptyString(panel.id)) {
+        errors.push(`${plabel}: "id" must be a non-empty string`);
+      } else if (panelIds.has(panel.id)) {
+        errors.push(`${plabel}: duplicate panel id "${panel.id}"`);
+      } else {
+        panelIds.add(panel.id);
+      }
+      if (!isNonEmptyString(panel.backgroundColor)) {
+        errors.push(`${plabel}: "backgroundColor" must be a non-empty string`);
+      }
+      if (!Array.isArray(panel.layers)) {
+        errors.push(`${plabel}: "layers" must be an array`);
+        return;
+      }
+      validateLayers(panel.layers, `${plabel}.layers`, layerIds, slotIds, errors);
+    });
+  } else if (Array.isArray(value.layers)) {
+    // Classic v1 single-canvas shape.
+    validateLayers(value.layers, "layers", layerIds, slotIds, errors);
+  } else {
+    errors.push('"layers" must be an array (or provide "panels")');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// Validates a stack of layers, accumulating id/slotId uniqueness into the
+// shared sets so collisions are caught across every panel.
+function validateLayers(
+  layers: unknown[],
+  prefix: string,
+  layerIds: Set<string>,
+  slotIds: Set<string>,
+  errors: string[]
+) {
+  layers.forEach((layer: unknown, i: number) => {
+    const label = `${prefix}[${i}]`;
     if (!isRecord(layer)) {
       errors.push(`${label}: must be an object`);
       return;
@@ -191,8 +232,6 @@ export function validateTemplate(value: unknown): ValidationResult {
       }
     }
   });
-
-  return { valid: errors.length === 0, errors };
 }
 
 export function isTemplate(value: unknown): value is Template {

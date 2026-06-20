@@ -24,6 +24,7 @@ function layerLabel(layer: Layer): string {
 
 export default function LayerTree() {
   const template = useEditorStore((s) => s.template);
+  const activePanelId = useEditorStore((s) => s.activePanelId);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const removeLayer = useEditorStore((s) => s.removeLayer);
@@ -31,8 +32,10 @@ export default function LayerTree() {
   const toggleLock = useEditorStore((s) => s.toggleLock);
   const toggleHide = useEditorStore((s) => s.toggleHide);
 
+  const panel =
+    template?.panels.find((p) => p.id === activePanelId) ?? template?.panels[0];
   // Array index 0 = bottom of the stack; display reversed so top row = frontmost.
-  const layers = template ? [...template.layers].reverse() : [];
+  const layers = panel ? [...panel.layers].reverse() : [];
 
   const iconBtn =
     "rounded p-0.5 text-xs text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700";

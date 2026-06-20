@@ -262,14 +262,18 @@ function LayerFields({ layer }: { layer: Layer }) {
 
 function CanvasFields() {
   const template = useEditorStore((s) => s.template);
+  const activePanelId = useEditorStore((s) => s.activePanelId);
   const setBackgroundColor = useEditorStore((s) => s.setBackgroundColor);
   if (!template) return null;
+  const panel =
+    template.panels.find((p) => p.id === activePanelId) ?? template.panels[0];
+  const index = template.panels.findIndex((p) => p.id === panel.id);
   return (
     <>
-      <p className="text-xs text-zinc-500">Canvas</p>
+      <p className="text-xs text-zinc-500">Panel {index + 1}</p>
       <ColorField
         label="Background"
-        value={template.canvas.backgroundColor ?? "#FFFFFF"}
+        value={panel.backgroundColor ?? "#FFFFFF"}
         onCommit={setBackgroundColor}
       />
       <p className="pt-2 text-center text-[11px] text-zinc-600">
@@ -281,11 +285,14 @@ function CanvasFields() {
 
 export default function PropertiesPanel() {
   const template = useEditorStore((s) => s.template);
+  const activePanelId = useEditorStore((s) => s.activePanelId);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
-  const layer = template?.layers.find((l) => l.id === selectedLayerId);
+  const panel =
+    template?.panels.find((p) => p.id === activePanelId) ?? template?.panels[0];
+  const layer = panel?.layers.find((l) => l.id === selectedLayerId);
 
   const slots =
-    template?.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : [])) ?? [];
+    panel?.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : [])) ?? [];
 
   return (
     <aside className="flex min-h-0 flex-col border-l border-zinc-800 bg-zinc-900">

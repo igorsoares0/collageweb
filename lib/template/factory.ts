@@ -1,5 +1,7 @@
 import { CURRENT_SCHEMA_VERSION } from "./types";
-import type { AspectRatio, Layer, LayerType, Template } from "./types";
+import type { AspectRatio, Layer, LayerType, Panel, Template } from "./types";
+
+const DEFAULT_BACKGROUND = "#FFFFFF";
 
 export const CANVAS_FORMATS: Record<
   AspectRatio,
@@ -19,35 +21,103 @@ export const STICKER_ASSETS = [
   "sticker_badge",
 ];
 
+export function createPanel(backgroundColor = DEFAULT_BACKGROUND): Panel {
+  return { id: crypto.randomUUID(), backgroundColor, layers: [] };
+}
+
 export function createTemplate(name = "Untitled Template"): Template {
+  const { width, height } = CANVAS_FORMATS.story;
   return {
     id: crypto.randomUUID(),
     schemaVersion: CURRENT_SCHEMA_VERSION,
     version: 0,
     name,
     aspectRatio: "story",
-    canvas: { ...CANVAS_FORMATS.story, backgroundColor: "#FFFFFF" },
-    layers: [],
+    canvas: { width, height },
+    panels: [createPanel()],
   };
 }
 
-// Fills fields that older saved templates predate (schemaVersion and
-// canvas.backgroundColor both shipped after the first templates were
-// persisted). Apply on every read path.
-export function normalizeTemplate(template: Template): Template {
-  return {
-    ...template,
-    schemaVersion: template.schemaVersion ?? 1,
+// Normalizes any stored/imported shape into the canonical in-memory form
+// (a panels array). Handles three histories: pre-schemaVersion templates,
+// the classic single-canvas v1 shape (canvas.backgroundColor + top-level
+// layers), and the v2 multi-panel shape. Apply on every read path.
+export function normalizeTemplate(template: unknown): Template {
+  const t = template as Record<string, unknown>;
+  const canvas = (t.canvas ?? {}) as Record<string, unknown>;
+  const base = {
+    id: t.id as string,
+    version: t.version as number,
+    name: t.name as string,
+    aspectRatio: t.aspectRatio as AspectRatio,
     canvas: {
-      ...template.canvas,
-      backgroundColor: template.canvas.backgroundColor ?? "#FFFFFF",
+      width: canvas.width as number,
+      height: canvas.height as number,
     },
+  };
+
+  if (Array.isArray(t.panels)) {
+    return {
+      ...base,
+      schemaVersion: (t.schemaVersion as number) ?? CURRENT_SCHEMA_VERSION,
+      panels: (t.panels as Panel[]).map((p) => ({
+        id: p.id,
+        backgroundColor: p.backgroundColor ?? DEFAULT_BACKGROUND,
+        layers: p.layers ?? [],
+      })),
+    };
+  }
+
+  // Classic v1: fold the single canvas into one panel.
+  return {
+    ...base,
+    schemaVersion: 1,
+    panels: [
+      {
+        id: crypto.randomUUID(),
+        backgroundColor:
+          (canvas.backgroundColor as string) ?? DEFAULT_BACKGROUND,
+        layers: (t.layers as Layer[]) ?? [],
+      },
+    ],
+  };
+}
+
+// Inverse of normalizeTemplate: produces the wire shape Flutter consumes.
+// One panel -> classic v1 (back-compat, byte-identical to pre-panels exports);
+// many panels -> v2 with a panels array. schemaVersion is set accordingly.
+export function serializeTemplate(template: Template): Record<string, unknown> {
+  const { id, version, name, aspectRatio, canvas, panels } = template;
+  const { width, height } = canvas;
+  if (panels.length === 1) {
+    return {
+      id,
+      schemaVersion: 1,
+      version,
+      name,
+      aspectRatio,
+      canvas: { width, height, backgroundColor: panels[0].backgroundColor },
+      layers: panels[0].layers,
+    };
+  }
+  return {
+    id,
+    schemaVersion: 2,
+    version,
+    name,
+    aspectRatio,
+    canvas: { width, height },
+    panels,
   };
 }
 
 function nextSlotId(template: Template, prefix: string): string {
+  // slotIds are unique across the whole template (the app keys user content by
+  // slotId globally), so scan every panel, not just the active one.
   const taken = new Set(
-    template.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : []))
+    template.panels.flatMap((p) =>
+      p.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : []))
+    )
   );
   let n = 1;
   while (taken.has(`${prefix}_${n}`)) n++;

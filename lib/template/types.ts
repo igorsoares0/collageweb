@@ -65,11 +65,25 @@ export interface StickerLayer extends BaseLayer {
 
 export type Layer = ImageLayer | TextLayer | ShapeLayer | StickerLayer;
 
+// One slide of the carousel: its own background and layer stack. All panels in
+// a template share the template's canvas size (a carousel must be uniform).
+export interface Panel {
+  id: string;
+  backgroundColor: string;
+  // Index 0 = bottom of the stack (Konva/Flutter render order).
+  layers: Layer[];
+}
+
 // Highest template schema this editor (and the current renderers) understand.
 // Bump ONLY when the JSON contract gains features old renderers can't draw;
 // clients must skip templates with schemaVersion above what they support.
-export const CURRENT_SCHEMA_VERSION = 1;
+// v2 added multi-panel ("panels"); single-panel templates still serialize as
+// v1 (canvas.backgroundColor + top-level layers) for back-compat.
+export const CURRENT_SCHEMA_VERSION = 2;
 
+// Canonical in-memory shape: always a panels array (length >= 1). The wire
+// shape is back-compat: 1 panel serializes as classic v1 (canvas.backgroundColor
+// + layers), >1 as v2 (panels). See normalizeTemplate/serializeTemplate.
 export interface Template {
   id: string;
   // Capability gate for renderers (see CURRENT_SCHEMA_VERSION).
@@ -78,15 +92,12 @@ export interface Template {
   version: number;
   name: string;
   aspectRatio: AspectRatio;
+  // Shared by every panel; backgroundColor now lives on each Panel.
   canvas: {
     width: number;
     height: number;
-    // Optional, defaults to white. Additive/back-compatible — old templates
-    // and renderers fall back to white, so no schemaVersion bump.
-    backgroundColor: string;
   };
-  // Index 0 = bottom of the stack (Konva/Flutter render order).
-  layers: Layer[];
+  panels: Panel[];
 }
 
 export type Category =

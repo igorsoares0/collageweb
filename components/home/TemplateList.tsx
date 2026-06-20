@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getRepository } from "@/lib/persistence/repository";
-import { createTemplate } from "@/lib/template/factory";
+import { createTemplate, serializeTemplate } from "@/lib/template/factory";
 import { importTemplateFile } from "@/lib/file-io";
 import type { TemplateSummary } from "@/lib/persistence/TemplateRepository";
 
@@ -30,7 +30,8 @@ export default function TemplateList() {
     const template = createTemplate();
     const now = new Date().toISOString();
     await getRepository().save({
-      template,
+      // Store the wire shape (a brand-new template is single-panel → v1).
+      template: serializeTemplate(template) as unknown as typeof template,
       premium: false,
       createdAt: now,
       updatedAt: now,
