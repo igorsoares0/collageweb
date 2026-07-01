@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Group, Image as KonvaImage, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
-import { frameAsset } from "@/lib/template/factory";
+import { useAssetStore } from "@/store/assetStore";
+import { resolveFrame } from "@/lib/assets/catalog";
 import type {
   ImageLayer,
   Layer,
@@ -87,7 +88,8 @@ function placeholderLabelSize(width: number, height: number) {
 
 function ImageSlotNode({ layer }: { layer: ImageLayer }) {
   const { handlers, updateLayer } = useLayerInteraction(layer);
-  const frame = frameAsset(layer.frameAssetId);
+  const assets = useAssetStore((s) => s.assets);
+  const frame = resolveFrame(layer.frameAssetId, assets);
   const frameImg = useHtmlImage(frame?.src);
 
   // The photo (here a placeholder) lives inside the frame's transparent window;

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
+import { useAssetStore } from "@/store/assetStore";
 import { getRepository } from "@/lib/persistence/repository";
 import { normalizeTemplate } from "@/lib/template/factory";
 import { GOOGLE_FONTS_CSS_URL } from "@/lib/fonts";
@@ -31,6 +32,7 @@ export interface RecordMeta {
 
 export default function EditorShell({ id }: { id: string }) {
   const loadTemplate = useEditorStore((s) => s.loadTemplate);
+  const loadAssets = useAssetStore((s) => s.load);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
   const removeLayer = useEditorStore((s) => s.removeLayer);
@@ -51,6 +53,12 @@ export default function EditorShell({ id }: { id: string }) {
     () => thumbnailFnRef.current?.() || undefined,
     []
   );
+
+  // Load the asset catalog (frames/stickers) once; the properties panel and
+  // canvas read it to list and render frames.
+  useEffect(() => {
+    loadAssets();
+  }, [loadAssets]);
 
   useEffect(() => {
     getRepository()

@@ -59,11 +59,6 @@ export const FRAME_ASSETS: FrameAsset[] = [
   },
 ];
 
-const FRAME_ASSETS_BY_ID = new Map(FRAME_ASSETS.map((f) => [f.id, f]));
-
-export function frameAsset(id: string | undefined): FrameAsset | undefined {
-  return id ? FRAME_ASSETS_BY_ID.get(id) : undefined;
-}
 
 export function createPanel(backgroundColor = DEFAULT_BACKGROUND): Panel {
   return { id: crypto.randomUUID(), backgroundColor, layers: [] };

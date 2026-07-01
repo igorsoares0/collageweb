@@ -1,9 +1,14 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
+import { useAssetStore } from "@/store/assetStore";
 import { EDITOR_FONTS } from "@/lib/fonts";
-import { FRAME_ASSETS, STICKER_ASSETS, frameAsset } from "@/lib/template/factory";
-import type { Layer, TextAlignment } from "@/lib/template/types";
+import { STICKER_ASSETS } from "@/lib/template/factory";
+import { analyzeImage } from "@/lib/assets/detectWindow";
+import { resolveFrame, resolveFrames } from "@/lib/assets/catalog";
+import type { ResolvedFrame } from "@/lib/assets/catalog";
+import type { ImageLayer, Layer, TextAlignment } from "@/lib/template/types";
 
 const inputCls =
   "w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs focus:border-indigo-600 focus:outline-none";
@@ -138,6 +143,105 @@ function SelectField({
   );
 }
 
+// The frame picker for an image layer: choose a frame from the catalog (bundled
+// seeds + uploaded), or upload a new PNG. On upload the transparent window is
+// auto-detected in the browser (analyzeImage) and the asset is saved to the
+// catalog, so it's immediately reusable — no code change, no app rebuild.
+function FrameField({
+  layer,
+  patch,
+}: {
+  layer: ImageLayer;
+  patch: (p: Partial<Layer>) => void;
+}) {
+  const beginHistory = useEditorStore((s) => s.beginHistory);
+  const assets = useAssetStore((s) => s.assets);
+  const createAsset = useAssetStore((s) => s.create);
+  const frames = resolveFrames(assets);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Snap the layer's height to the frame's aspect so it never stretches;
+  // clearing the frame leaves the current dimensions alone.
+  const apply = (frame: ResolvedFrame | undefined) => {
+    beginHistory();
+    patch(
+      frame
+        ? { frameAssetId: frame.id, height: Math.round(layer.width / frame.aspect) }
+        : { frameAssetId: undefined }
+    );
+  };
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const { dataUrl, aspect, window: frameWindow } = await analyzeImage(file);
+      if (!frameWindow) {
+        setError("Sem área transparente — não dá pra usar como moldura.");
+        return;
+      }
+      const name = file.name.replace(/\.[^.]+$/, "");
+      const record = await createAsset({
+        type: "frame",
+        name,
+        dataUrl,
+        aspect,
+        window: frameWindow,
+      });
+      apply({
+        id: record.id,
+        label: record.name,
+        src: dataUrl,
+        aspect,
+        window: frameWindow,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha no upload.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Field label="Frame">
+      <select
+        value={layer.frameAssetId ?? ""}
+        onChange={(e) => apply(resolveFrame(e.target.value || undefined, assets))}
+        className={inputCls}
+      >
+        <option value="">None</option>
+        {frames.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={busy}
+        className="mt-1.5 w-full rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-50"
+      >
+        {busy ? "Uploading…" : "Upload frame…"}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
+    </Field>
+  );
+}
+
 function LayerFields({ layer }: { layer: Layer }) {
   const updateLayer = useEditorStore((s) => s.updateLayer);
   const beginHistory = useEditorStore((s) => s.beginHistory);
@@ -180,34 +284,7 @@ function LayerFields({ layer }: { layer: Layer }) {
               className="w-full"
             />
           </Field>
-          <Field label="Frame">
-            <select
-              value={layer.frameAssetId ?? ""}
-              onChange={(e) => {
-                beginHistory();
-                const id = e.target.value || undefined;
-                const frame = frameAsset(id);
-                // Snap height to the frame's aspect so it never stretches;
-                // clearing the frame leaves the current dimensions alone.
-                patch(
-                  frame
-                    ? {
-                        frameAssetId: id,
-                        height: Math.round(layer.width / frame.aspect),
-                      }
-                    : { frameAssetId: undefined }
-                );
-              }}
-              className={inputCls}
-            >
-              <option value="">None</option>
-              {FRAME_ASSETS.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <FrameField layer={layer} patch={patch} />
         </>
       );
     case "text":
