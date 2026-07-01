@@ -1,5 +1,18 @@
 import { CURRENT_SCHEMA_VERSION } from "./types";
-import type { AspectRatio, Layer, LayerType, Panel, Template } from "./types";
+import type {
+  AspectRatio,
+  GridLayer,
+  Layer,
+  LayerType,
+  Panel,
+  Template,
+} from "./types";
+import {
+  collectSlotIds,
+  DEFAULT_GRID_PRESET_ID,
+  findGridPreset,
+  presetCells,
+} from "./grid";
 
 const DEFAULT_BACKGROUND = "#FFFFFF";
 
@@ -128,39 +141,68 @@ export function normalizeTemplate(template: unknown): Template {
 export function serializeTemplate(template: Template): Record<string, unknown> {
   const { id, version, name, aspectRatio, canvas, panels } = template;
   const { width, height } = canvas;
+  // schemaVersion is a capability gate; the wire *shape* (v1 classic vs v2
+  // panels) is chosen by panel count. A grid anywhere forces schemaVersion 3
+  // (older renderers can't draw it) but doesn't change the shape, so a single
+  // grid-bearing panel still serializes as the classic layers array.
+  const hasGrid = panels.some((p) => p.layers.some((l) => l.type === "grid"));
+  const base = { id, version, name, aspectRatio };
   if (panels.length === 1) {
     return {
-      id,
-      schemaVersion: 1,
-      version,
-      name,
-      aspectRatio,
+      ...base,
+      schemaVersion: hasGrid ? 3 : 1,
       canvas: { width, height, backgroundColor: panels[0].backgroundColor },
       layers: panels[0].layers,
     };
   }
   return {
-    id,
-    schemaVersion: 2,
-    version,
-    name,
-    aspectRatio,
+    ...base,
+    schemaVersion: hasGrid ? 3 : 2,
     canvas: { width, height },
     panels,
   };
 }
 
+// All slotIds already used anywhere in the template (across every panel and,
+// for grids, every cell), since the app keys user content by slotId globally.
+function takenSlotIds(template: Template): Set<string> {
+  return new Set(template.panels.flatMap((p) => collectSlotIds(p.layers)));
+}
+
 function nextSlotId(template: Template, prefix: string): string {
-  // slotIds are unique across the whole template (the app keys user content by
-  // slotId globally), so scan every panel, not just the active one.
-  const taken = new Set(
-    template.panels.flatMap((p) =>
-      p.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : []))
-    )
-  );
+  const taken = takenSlotIds(template);
   let n = 1;
   while (taken.has(`${prefix}_${n}`)) n++;
   return `${prefix}_${n}`;
+}
+
+// A grid element seeded from a preset. Sized as a large square by default; the
+// designer then moves/resizes it and swaps the preset. Cell slotIds are drawn
+// unique across the whole template.
+export function createGrid(
+  template: Template,
+  presetId = DEFAULT_GRID_PRESET_ID
+): GridLayer {
+  const preset = findGridPreset(presetId);
+  const { width: cw, height: ch } = template.canvas;
+  const width = Math.round(cw * 0.9);
+  const height = Math.min(width, Math.round(ch * 0.9));
+  return {
+    id: crypto.randomUUID(),
+    type: "grid",
+    x: Math.round((cw - width) / 2),
+    y: Math.round((ch - height) / 2),
+    width,
+    height,
+    rotation: 0,
+    cols: preset.cols,
+    rows: preset.rows,
+    colFractions: [...preset.colFractions],
+    rowFractions: [...preset.rowFractions],
+    gutter: Math.round(cw * 0.015),
+    cornerRadius: 0,
+    cells: presetCells(preset, takenSlotIds(template)),
+  };
 }
 
 export function createLayer(type: LayerType, template: Template): Layer {
@@ -216,5 +258,7 @@ export function createLayer(type: LayerType, template: Template): Layer {
         width: 300,
         height: 300,
       };
+    case "grid":
+      return createGrid(template);
   }
 }

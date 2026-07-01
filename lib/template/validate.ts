@@ -103,6 +103,9 @@ export function validateTemplate(value: unknown): ValidationResult {
   // one namespace, since the app keys user content by slotId globally).
   const layerIds = new Set<string>();
   const slotIds = new Set<string>();
+  // A grid layer is a schemaVersion-3 feature; track whether one appears so we
+  // can reject it under an older declared version.
+  const flags = { hasGrid: false };
 
   if (Array.isArray(value.panels)) {
     // v2 multi-panel shape.
@@ -127,13 +130,17 @@ export function validateTemplate(value: unknown): ValidationResult {
         errors.push(`${plabel}: "layers" must be an array`);
         return;
       }
-      validateLayers(panel.layers, `${plabel}.layers`, layerIds, slotIds, errors);
+      validateLayers(panel.layers, `${plabel}.layers`, layerIds, slotIds, flags, errors);
     });
   } else if (Array.isArray(value.layers)) {
     // Classic v1 single-canvas shape.
-    validateLayers(value.layers, "layers", layerIds, slotIds, errors);
+    validateLayers(value.layers, "layers", layerIds, slotIds, flags, errors);
   } else {
     errors.push('"layers" must be an array (or provide "panels")');
+  }
+
+  if (flags.hasGrid && isFiniteNumber(value.schemaVersion) && value.schemaVersion < 3) {
+    errors.push('a "grid" layer requires "schemaVersion" 3 or higher');
   }
 
   return { valid: errors.length === 0, errors };
@@ -141,11 +148,27 @@ export function validateTemplate(value: unknown): ValidationResult {
 
 // Validates a stack of layers, accumulating id/slotId uniqueness into the
 // shared sets so collisions are caught across every panel.
+// Registers a slotId, flagging duplicates across the shared namespace.
+function registerSlotId(
+  slotId: unknown,
+  label: string,
+  slotIds: Set<string>,
+  errors: string[]
+) {
+  if (!isNonEmptyString(slotId)) return;
+  if (slotIds.has(slotId)) {
+    errors.push(`${label}: duplicate slotId "${slotId}"`);
+  } else {
+    slotIds.add(slotId);
+  }
+}
+
 function validateLayers(
   layers: unknown[],
   prefix: string,
   layerIds: Set<string>,
   slotIds: Set<string>,
+  flags: { hasGrid: boolean },
   errors: string[]
 ) {
   layers.forEach((layer: unknown, i: number) => {
@@ -227,6 +250,11 @@ function validateLayers(
         checkNumbers(layer, ["x", "y", "width", "height"], label, errors);
         break;
       }
+      case "grid": {
+        flags.hasGrid = true;
+        validateGrid(layer, label, slotIds, errors);
+        break;
+      }
       default:
         errors.push(
           `${label}: unknown layer type "${String((layer as Record<string, unknown>).type)}"`
@@ -239,6 +267,79 @@ function validateLayers(
       } else {
         slotIds.add(layer.slotId);
       }
+    }
+  });
+}
+
+function isPositiveInt(v: unknown): v is number {
+  return isFiniteNumber(v) && Number.isInteger(v) && v > 0;
+}
+
+// A grid layer (§ schemaVersion 3): a placeable box tiled into fraction tracks
+// with per-cell photo slots. Fractions must match cols/rows; cells must sit
+// inside the track grid; cell slotIds join the shared slot namespace.
+function validateGrid(
+  layer: Record<string, unknown>,
+  label: string,
+  slotIds: Set<string>,
+  errors: string[]
+) {
+  checkNumbers(layer, ["x", "y", "width", "height", "rotation", "gutter", "cornerRadius"], label, errors);
+
+  const cols = layer.cols;
+  const rows = layer.rows;
+  if (!isPositiveInt(cols)) errors.push(`${label}: "cols" must be a positive integer`);
+  if (!isPositiveInt(rows)) errors.push(`${label}: "rows" must be a positive integer`);
+
+  const checkFractions = (fractions: unknown, count: unknown, name: string) => {
+    if (!Array.isArray(fractions)) {
+      errors.push(`${label}: "${name}" must be an array`);
+      return;
+    }
+    if (isPositiveInt(count) && fractions.length !== count) {
+      errors.push(`${label}: "${name}" length must equal ${String(count)}`);
+    }
+    if (!fractions.every((f) => isFiniteNumber(f) && f > 0)) {
+      errors.push(`${label}: "${name}" must be positive numbers`);
+    }
+  };
+  checkFractions(layer.colFractions, cols, "colFractions");
+  checkFractions(layer.rowFractions, rows, "rowFractions");
+
+  if (layer.gutterColor !== undefined && !isNonEmptyString(layer.gutterColor)) {
+    errors.push(`${label}: "gutterColor" must be a non-empty string`);
+  }
+
+  if (!Array.isArray(layer.cells) || layer.cells.length === 0) {
+    errors.push(`${label}: "cells" must be a non-empty array`);
+    return;
+  }
+  layer.cells.forEach((cell: unknown, i: number) => {
+    const clabel = `${label}.cells[${i}]`;
+    if (!isRecord(cell)) {
+      errors.push(`${clabel}: must be an object`);
+      return;
+    }
+    registerSlotId(cell.slotId, clabel, slotIds, errors);
+    if (!isNonEmptyString(cell.slotId)) {
+      errors.push(`${clabel}: cell requires a non-empty "slotId"`);
+    }
+    const col = cell.col;
+    const row = cell.row;
+    const colSpan = cell.colSpan ?? 1;
+    const rowSpan = cell.rowSpan ?? 1;
+    if (!isFiniteNumber(col) || !Number.isInteger(col) || col < 0) {
+      errors.push(`${clabel}: "col" must be a non-negative integer`);
+    } else if (isPositiveInt(cols) && (!isPositiveInt(colSpan) || col + colSpan > cols)) {
+      errors.push(`${clabel}: cell exceeds the column grid`);
+    }
+    if (!isFiniteNumber(row) || !Number.isInteger(row) || row < 0) {
+      errors.push(`${clabel}: "row" must be a non-negative integer`);
+    } else if (isPositiveInt(rows) && (!isPositiveInt(rowSpan) || row + rowSpan > rows)) {
+      errors.push(`${clabel}: cell exceeds the row grid`);
+    }
+    if (cell.borderRadius !== undefined && !isFiniteNumber(cell.borderRadius)) {
+      errors.push(`${clabel}: "borderRadius" must be a number`);
     }
   });
 }

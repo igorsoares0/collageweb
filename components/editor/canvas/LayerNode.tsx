@@ -6,7 +6,9 @@ import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
 import { useAssetStore } from "@/store/assetStore";
 import { resolveFrame } from "@/lib/assets/catalog";
+import { cellRect } from "@/lib/template/grid";
 import type {
+  GridLayer,
   ImageLayer,
   Layer,
   ShapeLayer,
@@ -232,6 +234,177 @@ function StickerNode({ layer }: { layer: StickerLayer }) {
   );
 }
 
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+// Draggable line between two tracks; moving it shifts the split of the two
+// adjacent fractions (nothing else). Local coords stay pre-rotation, so this
+// works unchanged when the whole grid is rotated. `offset*` centres the handle
+// on the gutter so node.x()/y() reads back as the divider centre.
+function DividerHandle({
+  axis,
+  center,
+  length,
+  thickness,
+  onDrag,
+  onDragStart,
+}: {
+  axis: "col" | "row";
+  center: number;
+  length: number;
+  thickness: number;
+  onDrag: (centerLocal: number) => void;
+  onDragStart: () => void;
+}) {
+  const vertical = axis === "col";
+  return (
+    <Rect
+      x={vertical ? center : 0}
+      y={vertical ? 0 : center}
+      offsetX={vertical ? thickness / 2 : 0}
+      offsetY={vertical ? 0 : thickness / 2}
+      width={vertical ? thickness : length}
+      height={vertical ? length : thickness}
+      fill="rgba(99,102,241,0.45)"
+      cornerRadius={thickness / 2}
+      draggable
+      onMouseEnter={(e) => {
+        const c = e.target.getStage()?.container();
+        if (c) c.style.cursor = vertical ? "ew-resize" : "ns-resize";
+      }}
+      onMouseLeave={(e) => {
+        const c = e.target.getStage()?.container();
+        if (c) c.style.cursor = "default";
+      }}
+      onDragStart={onDragStart}
+      onDragMove={(e) => {
+        // Lock the perpendicular axis; report the moved axis' local centre.
+        if (vertical) e.target.y(0);
+        else e.target.x(0);
+        onDrag(vertical ? e.target.x() : e.target.y());
+      }}
+    />
+  );
+}
+
+function GridNode({ layer }: { layer: GridLayer }) {
+  const { handlers, updateLayer } = useLayerInteraction(layer);
+  const beginHistory = useEditorStore((s) => s.beginHistory);
+  const selected = useEditorStore((s) => s.selectedLayerId === layer.id);
+  const showHandles = selected && !layer.editor?.locked;
+
+  const g = layer.gutter;
+  const handleW = Math.max(g, Math.max(layer.width, layer.height) * 0.02, 18);
+
+  // Shift two adjacent track fractions so their split follows the divider.
+  const dragDivider = (axis: "col" | "row", i: number, centerLocal: number) => {
+    const fractions = axis === "col" ? layer.colFractions : layer.rowFractions;
+    const tracks = axis === "col" ? layer.cols : layer.rows;
+    const box = axis === "col" ? layer.width : layer.height;
+    const usable = Math.max(1, box - g * (tracks + 1));
+    const s = sum(fractions) || 1;
+    const start = g * (i + 1) + usable * (sum(fractions.slice(0, i)) / s);
+    const pairFrac = fractions[i] + fractions[i + 1];
+    const pairPx = usable * (pairFrac / s);
+    const wi = Math.min(pairPx * 0.9, Math.max(pairPx * 0.1, centerLocal - start - g / 2));
+    const fi = (wi / pairPx) * pairFrac;
+    const next = [...fractions];
+    next[i] = fi;
+    next[i + 1] = pairFrac - fi;
+    updateLayer(
+      layer.id,
+      axis === "col" ? { colFractions: next } : { rowFractions: next }
+    );
+  };
+
+  const colCenter = (i: number) => {
+    const r = cellRect(layer, { slotId: "", col: i, row: 0 });
+    return r.x + r.width + g / 2;
+  };
+  const rowCenter = (j: number) => {
+    const r = cellRect(layer, { slotId: "", col: 0, row: j });
+    return r.y + r.height + g / 2;
+  };
+
+  return (
+    <Group
+      {...handlers}
+      x={layer.x}
+      y={layer.y}
+      width={layer.width}
+      height={layer.height}
+      rotation={layer.rotation}
+      onTransformEnd={(e) =>
+        updateLayer(layer.id, {
+          ...normalizedSize(e.target, layer),
+          rotation: Math.round(e.target.rotation() * 10) / 10,
+        })
+      }
+    >
+      {/* Full-box hit target (also paints the gutter colour when set). Invisible
+          but still hittable at opacity 0, so the whole grid selects on click. */}
+      <Rect
+        width={layer.width}
+        height={layer.height}
+        fill={layer.gutterColor ?? "#000000"}
+        opacity={layer.gutterColor ? 1 : 0}
+        cornerRadius={layer.cornerRadius}
+      />
+      {layer.cells.map((cell) => {
+        const r = cellRect(layer, cell);
+        const radius = cell.borderRadius ?? layer.cornerRadius;
+        return (
+          <Group key={cell.slotId} x={r.x} y={r.y}>
+            <Rect
+              width={r.width}
+              height={r.height}
+              fill="#E4E4E7"
+              stroke="#A1A1AA"
+              strokeWidth={3}
+              dash={[14, 10]}
+              cornerRadius={radius}
+            />
+            <Text
+              width={r.width}
+              height={r.height}
+              text={`▨\n${cell.slotId}`}
+              align="center"
+              verticalAlign="middle"
+              fontSize={placeholderLabelSize(r.width, r.height)}
+              lineHeight={1.4}
+              fill="#71717A"
+              fontFamily="Inter"
+            />
+          </Group>
+        );
+      })}
+      {showHandles &&
+        Array.from({ length: layer.cols - 1 }, (_, i) => (
+          <DividerHandle
+            key={`c${i}`}
+            axis="col"
+            center={colCenter(i)}
+            length={layer.height}
+            thickness={handleW}
+            onDragStart={beginHistory}
+            onDrag={(c) => dragDivider("col", i, c)}
+          />
+        ))}
+      {showHandles &&
+        Array.from({ length: layer.rows - 1 }, (_, j) => (
+          <DividerHandle
+            key={`r${j}`}
+            axis="row"
+            center={rowCenter(j)}
+            length={layer.width}
+            thickness={handleW}
+            onDragStart={beginHistory}
+            onDrag={(c) => dragDivider("row", j, c)}
+          />
+        ))}
+    </Group>
+  );
+}
+
 export default function LayerNode({ layer }: { layer: Layer }) {
   switch (layer.type) {
     case "image":
@@ -242,5 +415,7 @@ export default function LayerNode({ layer }: { layer: Layer }) {
       return <ShapeNode layer={layer} />;
     case "sticker":
       return <StickerNode layer={layer} />;
+    case "grid":
+      return <GridNode layer={layer} />;
   }
 }

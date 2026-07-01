@@ -94,9 +94,10 @@ export default function CanvasStage({ registerThumbnail }: Props) {
         ) * 0.95
       : 0;
 
-  // Per-type transform abilities: rotation only exists in the image schema;
-  // text has no height (auto), so only horizontal resizing.
-  const rotateEnabled = selectedLayer?.type === "image";
+  // Per-type transform abilities: rotation exists for image and grid; text has
+  // no height (auto), so only horizontal resizing.
+  const rotateEnabled =
+    selectedLayer?.type === "image" || selectedLayer?.type === "grid";
   const enabledAnchors =
     selectedLayer?.type === "text"
       ? ["middle-left", "middle-right"]

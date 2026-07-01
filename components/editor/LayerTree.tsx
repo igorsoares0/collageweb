@@ -8,6 +8,7 @@ const TYPE_BADGES: Record<Layer["type"], { label: string; className: string }> =
   text: { label: "TXT", className: "bg-amber-900 text-amber-300" },
   shape: { label: "SHP", className: "bg-emerald-900 text-emerald-300" },
   sticker: { label: "STK", className: "bg-violet-900 text-violet-300" },
+  grid: { label: "GRD", className: "bg-rose-900 text-rose-300" },
 };
 
 function layerLabel(layer: Layer): string {
@@ -19,6 +20,8 @@ function layerLabel(layer: Layer): string {
       return layer.fill;
     case "sticker":
       return layer.assetId;
+    case "grid":
+      return `${layer.cols}×${layer.rows} grid`;
   }
 }
 

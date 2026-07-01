@@ -5,10 +5,16 @@ import { useEditorStore } from "@/store/editorStore";
 import { useAssetStore } from "@/store/assetStore";
 import { EDITOR_FONTS } from "@/lib/fonts";
 import { STICKER_ASSETS } from "@/lib/template/factory";
+import { GRID_PRESETS, collectSlotIds } from "@/lib/template/grid";
 import { analyzeImage } from "@/lib/assets/detectWindow";
 import { resolveFrame, resolveFrames } from "@/lib/assets/catalog";
 import type { ResolvedFrame } from "@/lib/assets/catalog";
-import type { ImageLayer, Layer, TextAlignment } from "@/lib/template/types";
+import type {
+  GridLayer,
+  ImageLayer,
+  Layer,
+  TextAlignment,
+} from "@/lib/template/types";
 
 const inputCls =
   "w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs focus:border-indigo-600 focus:outline-none";
@@ -242,6 +248,69 @@ function FrameField({
   );
 }
 
+// Grid-specific controls: pick a layout preset (regenerates the cells with
+// fresh slotIds), and tune the shared gutter / corner radius / gutter colour.
+function GridField({
+  layer,
+  patch,
+}: {
+  layer: GridLayer;
+  patch: (p: Partial<Layer>) => void;
+}) {
+  const applyGridPreset = useEditorStore((s) => s.applyGridPreset);
+  const beginHistory = useEditorStore((s) => s.beginHistory);
+  return (
+    <>
+      <Field label="Layout">
+        <select
+          value=""
+          onChange={(e) => {
+            if (!e.target.value) return;
+            beginHistory();
+            applyGridPreset(layer.id, e.target.value);
+            e.target.value = "";
+          }}
+          className={inputCls}
+        >
+          <option value="">
+            {layer.cols}×{layer.rows} · trocar layout…
+          </option>
+          {GRID_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField label="Gutter" value={layer.gutter} onCommit={(gutter) => patch({ gutter })} min={0} />
+        <NumberField label="Corner radius" value={layer.cornerRadius} onCommit={(cornerRadius) => patch({ cornerRadius })} min={0} />
+      </div>
+      <Field label="Gutter color">
+        <div className="flex gap-1.5">
+          <input
+            type="color"
+            value={/^#[0-9a-fA-F]{6}$/.test(layer.gutterColor ?? "") ? layer.gutterColor : "#FFFFFF"}
+            onFocus={beginHistory}
+            onChange={(e) => patch({ gutterColor: e.target.value.toUpperCase() })}
+            className="h-6 w-8 cursor-pointer rounded border border-zinc-700 bg-zinc-950"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              beginHistory();
+              patch({ gutterColor: undefined });
+            }}
+            className="flex-1 rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800"
+          >
+            {layer.gutterColor ? `${layer.gutterColor} · limpar` : "Transparente"}
+          </button>
+        </div>
+      </Field>
+    </>
+  );
+}
+
 function LayerFields({ layer }: { layer: Layer }) {
   const updateLayer = useEditorStore((s) => s.updateLayer);
   const beginHistory = useEditorStore((s) => s.beginHistory);
@@ -362,6 +431,18 @@ function LayerFields({ layer }: { layer: Layer }) {
           </div>
         </>
       );
+    case "grid":
+      return (
+        <>
+          <GridField layer={layer} patch={patch} />
+          {xy}
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField label="Width" value={layer.width} onCommit={(width) => patch({ width })} min={1} />
+            <NumberField label="Height" value={layer.height} onCommit={(height) => patch({ height })} min={1} />
+          </div>
+          <NumberField label="Rotation" value={layer.rotation} onCommit={(rotation) => patch({ rotation })} />
+        </>
+      );
   }
 }
 
@@ -396,8 +477,7 @@ export default function PropertiesPanel() {
     template?.panels.find((p) => p.id === activePanelId) ?? template?.panels[0];
   const layer = panel?.layers.find((l) => l.id === selectedLayerId);
 
-  const slots =
-    panel?.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : [])) ?? [];
+  const slots = panel ? collectSlotIds(panel.layers) : [];
 
   return (
     <aside className="flex min-h-0 flex-col border-l border-zinc-800 bg-zinc-900">

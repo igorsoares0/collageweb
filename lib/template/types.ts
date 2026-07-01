@@ -3,7 +3,7 @@
 
 export type AspectRatio = "story" | "post" | "square";
 
-export type LayerType = "image" | "text" | "shape" | "sticker";
+export type LayerType = "image" | "text" | "shape" | "sticker" | "grid";
 
 export type TextAlignment = "left" | "center" | "right";
 
@@ -68,7 +68,46 @@ export interface StickerLayer extends BaseLayer {
   height: number;
 }
 
-export type Layer = ImageLayer | TextLayer | ShapeLayer | StickerLayer;
+// One fillable slot of a grid. Position in the grid is given by (col, row) plus
+// an optional span; the pixel rect is derived from the grid's fractions/gutter
+// by cellRect() (lib/template/grid.ts), reused verbatim by the Flutter renderer.
+export interface GridCell {
+  slotId: string;
+  col: number;
+  row: number;
+  colSpan?: number; // default 1 — lets a cell straddle tracks ("1 big + 2 small")
+  rowSpan?: number;
+  borderRadius?: number; // per-cell override; falls back to the grid's cornerRadius
+}
+
+// A unified photo grid: one placeable/rotatable element that tiles its box into
+// cells separated by a uniform gutter. Columns/rows are sized by fraction tracks
+// (like CSS grid fr units) so a divider drag just shifts two adjacent fractions.
+// Each cell is a global photo slot (keyed by slotId, like ImageLayer). Renderers
+// older than schemaVersion 3 can't draw this (there is no photo to degrade to).
+export interface GridLayer extends BaseLayer {
+  type: "grid";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  cols: number;
+  rows: number;
+  colFractions: number[]; // length === cols; only the ratios matter (auto-normalized)
+  rowFractions: number[]; // length === rows
+  gutter: number; // px: uniform spacing between cells AND the outer margin
+  cornerRadius: number; // px: default corner radius for every cell
+  gutterColor?: string; // absent = transparent (the panel background shows through)
+  cells: GridCell[];
+}
+
+export type Layer =
+  | ImageLayer
+  | TextLayer
+  | ShapeLayer
+  | StickerLayer
+  | GridLayer;
 
 // One slide of the carousel: its own background and layer stack. All panels in
 // a template share the template's canvas size (a carousel must be uniform).
@@ -83,8 +122,10 @@ export interface Panel {
 // Bump ONLY when the JSON contract gains features old renderers can't draw;
 // clients must skip templates with schemaVersion above what they support.
 // v2 added multi-panel ("panels"); single-panel templates still serialize as
-// v1 (canvas.backgroundColor + top-level layers) for back-compat.
-export const CURRENT_SCHEMA_VERSION = 2;
+// v1 (canvas.backgroundColor + top-level layers) for back-compat. v3 added the
+// grid layer ("type":"grid"): a template is tagged v3 only when it actually
+// contains a grid (see serializeTemplate), so grid-free templates stay v1/v2.
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // Canonical in-memory shape: always a panels array (length >= 1). The wire
 // shape is back-compat: 1 panel serializes as classic v1 (canvas.backgroundColor

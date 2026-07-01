@@ -15,6 +15,7 @@ const ADD_BUTTONS: { type: LayerType; label: string }[] = [
   { type: "text", label: "+ Text" },
   { type: "shape", label: "+ Shape" },
   { type: "sticker", label: "+ Sticker" },
+  { type: "grid", label: "+ Grid" },
 ];
 
 interface Props {

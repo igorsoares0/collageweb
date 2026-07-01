@@ -2,6 +2,11 @@
 
 import { create } from "zustand";
 import { CANVAS_FORMATS, createLayer, createPanel } from "@/lib/template/factory";
+import {
+  collectSlotIds,
+  findGridPreset,
+  presetCells,
+} from "@/lib/template/grid";
 import type {
   AspectRatio,
   Layer,
@@ -28,6 +33,8 @@ interface EditorState {
   updateLayer: (id: string, patch: Partial<Layer>) => void;
   removeLayer: (id: string) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
+  // Reshape a grid layer to a named preset (fresh, template-unique cell slotIds).
+  applyGridPreset: (id: string, presetId: string) => void;
   selectLayer: (id: string | null) => void;
   toggleLock: (id: string) => void;
   toggleHide: (id: string) => void;
@@ -157,6 +164,35 @@ export const useEditorStore = create<EditorState>((set, get) => {
         return { ...p, layers };
       }),
 
+    applyGridPreset: (id, presetId) => {
+      const { template } = get();
+      if (!template) return;
+      const preset = findGridPreset(presetId);
+      // Reuse slotId numbers freed by this grid's current cells; keep every
+      // other slot in the template off-limits.
+      const taken = new Set(
+        template.panels.flatMap((p) =>
+          collectSlotIds(p.layers.filter((l) => l.id !== id))
+        )
+      );
+      const cells = presetCells(preset, taken);
+      mutatePanel((p) => ({
+        ...p,
+        layers: p.layers.map((l) =>
+          l.id === id && l.type === "grid"
+            ? {
+                ...l,
+                cols: preset.cols,
+                rows: preset.rows,
+                colFractions: [...preset.colFractions],
+                rowFractions: [...preset.rowFractions],
+                cells,
+              }
+            : l
+        ),
+      }));
+    },
+
     selectLayer: (id) => set({ selectedLayerId: id }),
 
     toggleLock: (id) =>
@@ -196,18 +232,22 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const source = template.panels.find((p) => p.id === id);
       if (!source) return;
       // slotIds must stay unique across the template; regenerate them (and
-      // layer ids) for the copy so user content still binds per-slot.
+      // layer ids) for the copy so user content still binds per-slot. Grid
+      // cells each carry their own slotId, so re-mint every one of them too.
       const taken = new Set(
-        template.panels.flatMap((p) =>
-          p.layers.flatMap((l) => ("slotId" in l ? [l.slotId] : []))
-        )
+        template.panels.flatMap((p) => collectSlotIds(p.layers))
       );
       const copy: Panel = {
         id: crypto.randomUUID(),
         backgroundColor: source.backgroundColor,
         layers: source.layers.map((l) => {
           const cloned = { ...l, id: crypto.randomUUID() } as Layer;
-          if ("slotId" in cloned) {
+          if (cloned.type === "grid") {
+            cloned.cells = cloned.cells.map((c) => ({
+              ...c,
+              slotId: freshSlotId(taken, "cell"),
+            }));
+          } else if ("slotId" in cloned) {
             const prefix = cloned.type === "image" ? "image" : "text";
             cloned.slotId = freshSlotId(taken, prefix);
           }
