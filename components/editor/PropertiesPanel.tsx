@@ -2,7 +2,7 @@
 
 import { useEditorStore } from "@/store/editorStore";
 import { EDITOR_FONTS } from "@/lib/fonts";
-import { STICKER_ASSETS } from "@/lib/template/factory";
+import { FRAME_ASSETS, STICKER_ASSETS, frameAsset } from "@/lib/template/factory";
 import type { Layer, TextAlignment } from "@/lib/template/types";
 
 const inputCls =
@@ -179,6 +179,34 @@ function LayerFields({ layer }: { layer: Layer }) {
               onChange={(e) => patch({ opacity: Number(e.target.value) })}
               className="w-full"
             />
+          </Field>
+          <Field label="Frame">
+            <select
+              value={layer.frameAssetId ?? ""}
+              onChange={(e) => {
+                beginHistory();
+                const id = e.target.value || undefined;
+                const frame = frameAsset(id);
+                // Snap height to the frame's aspect so it never stretches;
+                // clearing the frame leaves the current dimensions alone.
+                patch(
+                  frame
+                    ? {
+                        frameAssetId: id,
+                        height: Math.round(layer.width / frame.aspect),
+                      }
+                    : { frameAssetId: undefined }
+                );
+              }}
+              className={inputCls}
+            >
+              <option value="">None</option>
+              {FRAME_ASSETS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
           </Field>
         </>
       );

@@ -1,8 +1,10 @@
 "use client";
 
-import { Group, Rect, Text } from "react-konva";
+import { useEffect, useState } from "react";
+import { Group, Image as KonvaImage, Rect, Text } from "react-konva";
 import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
+import { frameAsset } from "@/lib/template/factory";
 import type {
   ImageLayer,
   Layer,
@@ -10,6 +12,24 @@ import type {
   StickerLayer,
   TextLayer,
 } from "@/lib/template/types";
+
+// Loads an <img> for a Konva.Image (we avoid the use-image dependency). Returns
+// undefined until it decodes (the frame pops in once ready) and while the src is
+// mid-swap — we tag the loaded element with its src and only hand it back when it
+// still matches, so state is only ever set from the load callback (no cascading
+// render from a synchronous setState in the effect body).
+function useHtmlImage(src?: string): HTMLImageElement | undefined {
+  const [loaded, setLoaded] = useState<{ src: string; el: HTMLImageElement }>();
+  useEffect(() => {
+    if (!src) return;
+    const el = new window.Image();
+    const onLoad = () => setLoaded({ src, el });
+    el.addEventListener("load", onLoad);
+    el.src = src;
+    return () => el.removeEventListener("load", onLoad);
+  }, [src]);
+  return loaded?.src === src ? loaded?.el : undefined;
+}
 
 function useLayerInteraction(layer: Layer) {
   const selectLayer = useEditorStore((s) => s.selectLayer);
@@ -67,6 +87,21 @@ function placeholderLabelSize(width: number, height: number) {
 
 function ImageSlotNode({ layer }: { layer: ImageLayer }) {
   const { handlers, updateLayer } = useLayerInteraction(layer);
+  const frame = frameAsset(layer.frameAssetId);
+  const frameImg = useHtmlImage(frame?.src);
+
+  // The photo (here a placeholder) lives inside the frame's transparent window;
+  // without a frame it fills the whole layer. The frame paints over the top and
+  // ignores pointer events so clicks/drags still hit the photo group.
+  const win = frame
+    ? {
+        x: frame.window.x * layer.width,
+        y: frame.window.y * layer.height,
+        width: frame.window.w * layer.width,
+        height: frame.window.h * layer.height,
+      }
+    : { x: 0, y: 0, width: layer.width, height: layer.height };
+
   return (
     <Group
       {...handlers}
@@ -84,25 +119,37 @@ function ImageSlotNode({ layer }: { layer: ImageLayer }) {
       }
     >
       <Rect
-        width={layer.width}
-        height={layer.height}
+        x={win.x}
+        y={win.y}
+        width={win.width}
+        height={win.height}
         fill="#E4E4E7"
         stroke="#A1A1AA"
         strokeWidth={4}
         dash={[16, 12]}
-        cornerRadius={layer.borderRadius}
+        cornerRadius={frame ? 0 : layer.borderRadius}
       />
       <Text
-        width={layer.width}
-        height={layer.height}
+        x={win.x}
+        y={win.y}
+        width={win.width}
+        height={win.height}
         text={`▨\n${layer.slotId}`}
         align="center"
         verticalAlign="middle"
-        fontSize={placeholderLabelSize(layer.width, layer.height)}
+        fontSize={placeholderLabelSize(win.width, win.height)}
         lineHeight={1.4}
         fill="#71717A"
         fontFamily="Inter"
       />
+      {frame && frameImg && (
+        <KonvaImage
+          image={frameImg}
+          width={layer.width}
+          height={layer.height}
+          listening={false}
+        />
+      )}
     </Group>
   );
 }

@@ -29,6 +29,11 @@ export interface ImageLayer extends BaseLayer {
   rotation: number;
   opacity: number;
   borderRadius: number;
+  // Optional decorative frame (polaroid, etc.) painted OVER the user's photo.
+  // The asset's transparent window (see FRAME_ASSETS) is where the photo shows;
+  // absent = bare photo (unchanged). Additive/optional, so single-panel framed
+  // templates still serialize as v1 — an old renderer just draws the bare photo.
+  frameAssetId?: string;
 }
 
 export interface TextLayer extends BaseLayer {

@@ -21,6 +21,50 @@ export const STICKER_ASSETS = [
   "sticker_badge",
 ];
 
+// A photo frame (polaroid, etc.): a PNG with a transparent window through which
+// the user's photo shows. `aspect` is the frame image's own width/height — a
+// framed image layer's bounds follow it so the frame never stretches. `window`
+// is the transparent hole in normalized (0..1) frame coords: the photo is drawn
+// (and clipped) into that rectangle, then the frame paints over the whole layer.
+// Measured from the source PNGs in /public/assets/frames.
+export interface FrameAsset {
+  id: string;
+  label: string;
+  src: string;
+  aspect: number;
+  window: { x: number; y: number; w: number; h: number };
+}
+
+export const FRAME_ASSETS: FrameAsset[] = [
+  {
+    id: "frame_polaroid_v",
+    label: "Polaroid (vertical)",
+    src: "/assets/frames/pol-vert.png",
+    aspect: 1424 / 2010,
+    window: { x: 0.0492, y: 0.0244, w: 0.9024, h: 0.8199 },
+  },
+  {
+    id: "frame_polaroid_h",
+    label: "Polaroid (horizontal)",
+    src: "/assets/frames/pol-hor.png",
+    aspect: 2039 / 2010,
+    window: { x: 0.0387, y: 0.0244, w: 0.9201, h: 0.8214 },
+  },
+  {
+    id: "frame_quad",
+    label: "Quadro",
+    src: "/assets/frames/quad.png",
+    aspect: 1424 / 2010,
+    window: { x: 0.0344, y: 0.0244, w: 0.9298, h: 0.9468 },
+  },
+];
+
+const FRAME_ASSETS_BY_ID = new Map(FRAME_ASSETS.map((f) => [f.id, f]));
+
+export function frameAsset(id: string | undefined): FrameAsset | undefined {
+  return id ? FRAME_ASSETS_BY_ID.get(id) : undefined;
+}
+
 export function createPanel(backgroundColor = DEFAULT_BACKGROUND): Panel {
   return { id: crypto.randomUUID(), backgroundColor, layers: [] };
 }

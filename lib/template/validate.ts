@@ -180,6 +180,15 @@ function validateLayers(
         ) {
           errors.push(`${label}: "opacity" must be between 0 and 1`);
         }
+        // Optional decorative frame; a string id when present (the catalog it
+        // references may gain entries after a template is authored, so we don't
+        // pin it to the known set here).
+        if (
+          layer.frameAssetId !== undefined &&
+          !isNonEmptyString(layer.frameAssetId)
+        ) {
+          errors.push(`${label}: "frameAssetId" must be a non-empty string`);
+        }
         break;
       }
       case "text": {
