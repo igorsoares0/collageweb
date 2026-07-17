@@ -353,6 +353,9 @@ function DividerHandle({
   const vertical = axis === "col";
   return (
     <Rect
+      // Tagged so the thumbnail capture can hide editor chrome that lives in
+      // the content layer (see CanvasStage.registerThumbnail).
+      name="selection-chrome"
       x={vertical ? center : 0}
       y={vertical ? 0 : center}
       offsetX={vertical ? thickness / 2 : 0}

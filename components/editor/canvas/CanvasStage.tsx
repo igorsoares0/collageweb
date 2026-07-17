@@ -56,11 +56,19 @@ export default function CanvasStage({ registerThumbnail }: Props) {
       const layer = contentLayerRef.current;
       const stage = stageRef.current;
       if (!layer || !stage || stage.width() === 0) return "";
-      return layer.toDataURL({
-        mimeType: "image/jpeg",
-        quality: 0.7,
-        pixelRatio: 240 / stage.width(),
-      });
+      // Selection chrome that lives in the content layer (the grid's divider
+      // handles) must not leak into the saved thumbnail.
+      const chrome = layer.find(".selection-chrome");
+      chrome.forEach((n) => n.visible(false));
+      try {
+        return layer.toDataURL({
+          mimeType: "image/jpeg",
+          quality: 0.7,
+          pixelRatio: 240 / stage.width(),
+        });
+      } finally {
+        chrome.forEach((n) => n.visible(true));
+      }
     });
   }, [registerThumbnail]);
 
@@ -121,6 +129,11 @@ export default function CanvasStage({ registerThumbnail }: Props) {
   return (
     <div
       ref={containerRef}
+      // Clicking the dark area around the canvas deselects too — the Stage's
+      // own deselect only sees clicks inside it.
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) selectLayer(null);
+      }}
       className="flex h-full w-full items-center justify-center overflow-hidden bg-zinc-950"
     >
       {scale > 0 && (
