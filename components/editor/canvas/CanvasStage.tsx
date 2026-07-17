@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Stage, Layer as KonvaLayer, Rect, Transformer } from "react-konva";
+import { Group, Stage, Layer as KonvaLayer, Rect, Transformer } from "react-konva";
 import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
 import LayerNode, { SNAP_SCREEN_PX } from "./LayerNode";
 
 const MIN_LAYER_SIZE = 20;
+
+// Gap between side-by-side panels, as a fraction of the canvas width.
+const PANEL_GAP_FRACTION = 0.06;
 
 interface Props {
   registerThumbnail: (fn: () => string) => void;
@@ -17,6 +20,7 @@ export default function CanvasStage({ registerThumbnail }: Props) {
   const activePanelId = useEditorStore((s) => s.activePanelId);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const selectLayer = useEditorStore((s) => s.selectLayer);
+  const selectPanel = useEditorStore((s) => s.selectPanel);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -55,16 +59,28 @@ export default function CanvasStage({ registerThumbnail }: Props) {
     registerThumbnail(() => {
       const layer = contentLayerRef.current;
       const stage = stageRef.current;
-      if (!layer || !stage || stage.width() === 0) return "";
+      // Read the template from the store (not the render closure): this
+      // callback outlives renders and the canvas size can change (setFormat).
+      const t = useEditorStore.getState().template;
+      if (!layer || !stage || !t || stage.width() === 0) return "";
+      const s = stage.scaleX() || 1;
+      const w = t.canvas.width * s;
+      const h = t.canvas.height * s;
       // Selection chrome that lives in the content layer (the grid's divider
       // handles) must not leak into the saved thumbnail.
       const chrome = layer.find(".selection-chrome");
       chrome.forEach((n) => n.visible(false));
       try {
+        // First panel only — the stage now spans every panel side by side,
+        // and the gallery card shows a single page.
         return layer.toDataURL({
+          x: 0,
+          y: 0,
+          width: w,
+          height: h,
           mimeType: "image/jpeg",
           quality: 0.7,
-          pixelRatio: 240 / stage.width(),
+          pixelRatio: 240 / w,
         });
       } finally {
         chrome.forEach((n) => n.visible(true));
@@ -72,8 +88,10 @@ export default function CanvasStage({ registerThumbnail }: Props) {
     });
   }, [registerThumbnail]);
 
-  const panel =
-    template?.panels.find((p) => p.id === activePanelId) ?? template?.panels[0];
+  const panels = template?.panels ?? [];
+  const activeId = activePanelId ?? panels[0]?.id;
+  const activeIndex = Math.max(0, panels.findIndex((p) => p.id === activeId));
+  const panel = panels[activeIndex];
   const selectedLayer = panel?.layers.find((l) => l.id === selectedLayerId);
   const transformable =
     !!selectedLayer &&
@@ -94,13 +112,18 @@ export default function CanvasStage({ registerThumbnail }: Props) {
 
   if (!template || !panel) return null;
 
+  const { width: cw, height: ch } = template.canvas;
+  const gap = cw * PANEL_GAP_FRACTION;
+
+  // Scale fits ONE panel in the viewport (unchanged from the single-panel
+  // days); with several panels the stage grows sideways and the container
+  // scrolls horizontally, like the app's panel strip.
   const scale =
     viewport.width > 0 && viewport.height > 0
-      ? Math.min(
-          viewport.width / template.canvas.width,
-          viewport.height / template.canvas.height
-        ) * 0.95
+      ? Math.min(viewport.width / cw, viewport.height / ch) * 0.95
       : 0;
+  const totalWidth = panels.length * cw + (panels.length - 1) * gap;
+  const panelX = (i: number) => i * (cw + gap);
 
   // Per-type transform abilities: rotation exists for image and grid; text has
   // no height (auto), so only horizontal resizing.
@@ -134,35 +157,73 @@ export default function CanvasStage({ registerThumbnail }: Props) {
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) selectLayer(null);
       }}
-      className="flex h-full w-full items-center justify-center overflow-hidden bg-zinc-950"
+      className="flex h-full w-full overflow-auto bg-zinc-950"
     >
       {scale > 0 && (
-        <div className="shadow-2xl shadow-black/60">
+        // m-auto centers when everything fits and still lets the container
+        // scroll when the panel row overflows (justify-center would clip it).
+        <div className="m-auto">
           <Stage
             ref={stageRef}
-            width={Math.round(template.canvas.width * scale)}
-            height={Math.round(template.canvas.height * scale)}
+            width={Math.round(totalWidth * scale)}
+            height={Math.round(ch * scale)}
             scaleX={scale}
             scaleY={scale}
             onMouseDown={deselectOnEmpty}
             onTouchStart={deselectOnEmpty}
           >
             <KonvaLayer ref={contentLayerRef}>
-              {/* Canvas background; listening=false so empty clicks hit the
-                  stage and deselect. Also keeps JPEG thumbnails non-black. */}
-              <Rect
-                x={0}
-                y={0}
-                width={template.canvas.width}
-                height={template.canvas.height}
-                fill={panel.backgroundColor || "#FFFFFF"}
-                listening={false}
-              />
-              {panel.layers.map((layer) => (
-                <LayerNode key={layer.id} layer={layer} />
-              ))}
+              {panels.map((p, i) => {
+                const active = p.id === activeId;
+                // mousedown (not click) so activation happens before the
+                // pressed layer's own click/dragstart selects it.
+                const activate = () => {
+                  if (!active) selectPanel(p.id);
+                };
+                // Empty clicks on the active panel's background deselect;
+                // selectPanel already clears the selection for the others.
+                const clearOnActive = () => {
+                  if (active) selectLayer(null);
+                };
+                // Any press inside the panel bubbles to the Group and
+                // activates it; the background Rect additionally clears the
+                // selection when the panel is already the active one.
+                return (
+                  <Group
+                    key={p.id}
+                    x={panelX(i)}
+                    onMouseDown={activate}
+                    onTouchStart={activate}
+                  >
+                    <Rect
+                      x={0}
+                      y={0}
+                      width={cw}
+                      height={ch}
+                      fill={p.backgroundColor || "#FFFFFF"}
+                      onMouseDown={clearOnActive}
+                      onTouchStart={clearOnActive}
+                    />
+                    {p.layers.map((layer) => (
+                      <LayerNode key={layer.id} layer={layer} />
+                    ))}
+                  </Group>
+                );
+              })}
             </KonvaLayer>
             <KonvaLayer>
+              {panels.length > 1 && (
+                // Active-panel outline; overlay layer, so never in thumbnails.
+                <Rect
+                  x={panelX(activeIndex)}
+                  y={0}
+                  width={cw}
+                  height={ch}
+                  stroke="#6366F1"
+                  strokeWidth={2 / scale}
+                  listening={false}
+                />
+              )}
               <Transformer
                 ref={transformerRef}
                 keepRatio={false}
@@ -178,7 +239,7 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                     return oldBox;
                   }
                   // Resizing: the edges this gesture moves magnet onto the
-                  // canvas bounds, but only within the threshold —
+                  // active panel's bounds, but only within the threshold —
                   // overshooting past the canvas stays free. Skipped when the
                   // layer is rotated (the box no longer lines up with the
                   // canvas). Boxes here are in screen pixels.
@@ -189,18 +250,22 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                     : NaN;
                   if (rot < 0.5 || rot > 359.5) {
                     const box = { ...newBox };
-                    const canvasW = template.canvas.width * scale;
-                    const canvasH = template.canvas.height * scale;
-                    if (box.x !== oldBox.x && Math.abs(box.x) <= SNAP_SCREEN_PX) {
-                      box.width += box.x;
-                      box.x = 0;
+                    const left = panelX(activeIndex) * scale;
+                    const right0 = left + cw * scale;
+                    const canvasH = ch * scale;
+                    if (
+                      box.x !== oldBox.x &&
+                      Math.abs(box.x - left) <= SNAP_SCREEN_PX
+                    ) {
+                      box.width += box.x - left;
+                      box.x = left;
                     }
                     const right = box.x + box.width;
                     if (
                       right !== oldBox.x + oldBox.width &&
-                      Math.abs(right - canvasW) <= SNAP_SCREEN_PX
+                      Math.abs(right - right0) <= SNAP_SCREEN_PX
                     ) {
-                      box.width = canvasW - box.x;
+                      box.width = right0 - box.x;
                     }
                     if (box.y !== oldBox.y && Math.abs(box.y) <= SNAP_SCREEN_PX) {
                       box.height += box.y;

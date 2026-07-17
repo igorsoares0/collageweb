@@ -94,8 +94,11 @@ function useLayerInteraction(layer: Layer) {
       const stage = e.target.getStage();
       if (!stage || !canvasWidth) return;
       const threshold = SNAP_SCREEN_PX / (stage.scaleX() || 1);
-      // relativeTo the stage = template units, rotation already accounted for.
-      const box = e.target.getClientRect({ relativeTo: stage });
+      // relativeTo the parent (the panel's Group) = panel-local template
+      // units, rotation already accounted for.
+      const parent = e.target.getParent();
+      if (!parent) return;
+      const box = e.target.getClientRect({ relativeTo: parent });
       e.target.x(
         e.target.x() +
           snapDelta(
