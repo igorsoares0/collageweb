@@ -32,6 +32,8 @@ interface EditorState {
   addLayer: (type: LayerType) => void;
   updateLayer: (id: string, patch: Partial<Layer>) => void;
   removeLayer: (id: string) => void;
+  // Copy of a layer, nudged and inserted just above the original, selected.
+  duplicateLayer: (id: string) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   // Reshape a grid layer to a named preset (fresh, template-unique cell slotIds).
   applyGridPreset: (id: string, presetId: string) => void;
@@ -57,6 +59,27 @@ function freshSlotId(taken: Set<string>, prefix: string): string {
   const id = `${prefix}_${n}`;
   taken.add(id);
   return id;
+}
+
+// Deep copy of a layer with a new id and fresh, template-unique slotIds (user
+// content binds per slot, so a copy must never share them). Grid cells each
+// carry their own slotId — re-mint every one. `taken` accumulates the minted
+// ids so successive clones stay unique.
+function cloneLayer(layer: Layer, taken: Set<string>): Layer {
+  const cloned = structuredClone(layer);
+  cloned.id = crypto.randomUUID();
+  if (cloned.type === "grid") {
+    cloned.cells = cloned.cells.map((c) => ({
+      ...c,
+      slotId: freshSlotId(taken, "cell"),
+    }));
+  } else if ("slotId" in cloned) {
+    cloned.slotId = freshSlotId(
+      taken,
+      cloned.type === "image" ? "image" : "text"
+    );
+  }
+  return cloned;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => {
@@ -153,6 +176,28 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (get().selectedLayerId === id) set({ selectedLayerId: null });
     },
 
+    duplicateLayer: (id) => {
+      const { template } = get();
+      if (!template) return;
+      const taken = new Set(
+        template.panels.flatMap((p) => collectSlotIds(p.layers))
+      );
+      let copyId: string | null = null;
+      mutatePanel((p) => {
+        const index = p.layers.findIndex((l) => l.id === id);
+        if (index < 0) return p;
+        const copy = cloneLayer(p.layers[index], taken);
+        // Nudge so the copy reads as its own element, not a no-op.
+        copy.x += 32;
+        copy.y += 32;
+        copyId = copy.id;
+        const layers = [...p.layers];
+        layers.splice(index + 1, 0, copy);
+        return { ...p, layers };
+      });
+      if (copyId) set({ selectedLayerId: copyId });
+    },
+
     reorderLayer: (id, direction) =>
       mutatePanel((p) => {
         const index = p.layers.findIndex((l) => l.id === id);
@@ -231,28 +276,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
       if (!template) return;
       const source = template.panels.find((p) => p.id === id);
       if (!source) return;
-      // slotIds must stay unique across the template; regenerate them (and
-      // layer ids) for the copy so user content still binds per-slot. Grid
-      // cells each carry their own slotId, so re-mint every one of them too.
       const taken = new Set(
         template.panels.flatMap((p) => collectSlotIds(p.layers))
       );
       const copy: Panel = {
         id: crypto.randomUUID(),
         backgroundColor: source.backgroundColor,
-        layers: source.layers.map((l) => {
-          const cloned = { ...l, id: crypto.randomUUID() } as Layer;
-          if (cloned.type === "grid") {
-            cloned.cells = cloned.cells.map((c) => ({
-              ...c,
-              slotId: freshSlotId(taken, "cell"),
-            }));
-          } else if ("slotId" in cloned) {
-            const prefix = cloned.type === "image" ? "image" : "text";
-            cloned.slotId = freshSlotId(taken, prefix);
-          }
-          return cloned;
-        }),
+        layers: source.layers.map((l) => cloneLayer(l, taken)),
       };
       mutateTemplate((t) => {
         const index = t.panels.findIndex((p) => p.id === id);

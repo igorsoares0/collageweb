@@ -31,6 +31,7 @@ export default function LayerTree() {
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const removeLayer = useEditorStore((s) => s.removeLayer);
+  const duplicateLayer = useEditorStore((s) => s.duplicateLayer);
   const reorderLayer = useEditorStore((s) => s.reorderLayer);
   const toggleLock = useEditorStore((s) => s.toggleLock);
   const toggleHide = useEditorStore((s) => s.toggleHide);
@@ -95,6 +96,16 @@ export default function LayerTree() {
                   }}
                 >
                   ↓
+                </button>
+                <button
+                  className={iconBtn}
+                  title="Duplicate layer (Ctrl+D)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    duplicateLayer(layer.id);
+                  }}
+                >
+                  ⧉
                 </button>
                 <button
                   className={iconBtn}

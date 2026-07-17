@@ -36,6 +36,7 @@ export default function EditorShell({ id }: { id: string }) {
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
   const removeLayer = useEditorStore((s) => s.removeLayer);
+  const duplicateLayer = useEditorStore((s) => s.duplicateLayer);
 
   const [status, setStatus] = useState<"loading" | "ready" | "missing">(
     "loading"
@@ -97,6 +98,12 @@ export default function EditorShell({ id }: { id: string }) {
       } else if (mod && e.key.toLowerCase() === "y") {
         e.preventDefault();
         redo();
+      } else if (mod && e.key.toLowerCase() === "d") {
+        const selected = useEditorStore.getState().selectedLayerId;
+        if (selected) {
+          e.preventDefault();
+          duplicateLayer(selected);
+        }
       } else if (e.key === "Delete" || e.key === "Backspace") {
         const selected = useEditorStore.getState().selectedLayerId;
         if (selected) {
@@ -107,7 +114,7 @@ export default function EditorShell({ id }: { id: string }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undo, redo, removeLayer]);
+  }, [undo, redo, removeLayer, duplicateLayer]);
 
   if (status === "missing") {
     return (
