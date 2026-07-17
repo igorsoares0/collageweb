@@ -6,7 +6,7 @@ import type { AssetType, FrameWindow } from "@/lib/persistence/AssetRepository";
 // the rest of this API, there is NO auth yet — this is a write endpoint and must
 // be gated (auth + rate limit) before any public deploy.
 const MAX_DATA_URL = 3_000_000; // ~2 MB image as base64
-const TYPES: AssetType[] = ["frame", "sticker"];
+const TYPES: AssetType[] = ["frame", "sticker", "photo"];
 
 function badRequest(message: string) {
   return Response.json({ error: message }, { status: 400 });

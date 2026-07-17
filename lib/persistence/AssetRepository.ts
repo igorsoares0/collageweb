@@ -1,8 +1,10 @@
-// Uploadable editor assets (frames, stickers) — the app-side catalog that used
-// to be a hardcoded list. Stored in Neon as small base64 PNGs (like template
-// thumbnails), so adding one is an upload, not a code change + app rebuild.
+// Uploadable editor assets (frames, stickers, designer photos) — the app-side
+// catalog that used to be a hardcoded list. Stored in Neon as small base64
+// images (like template thumbnails), so adding one is an upload, not a code
+// change + app rebuild. "photo" assets are template content: layers/grid cells
+// reference them by imageAssetId.
 
-export type AssetType = "frame" | "sticker";
+export type AssetType = "frame" | "sticker" | "photo";
 
 // The transparent window of a frame, in normalized (0..1) image coordinates —
 // where the user's photo shows through. Auto-detected on upload from the PNG's

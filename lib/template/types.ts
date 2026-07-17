@@ -34,6 +34,10 @@ export interface ImageLayer extends BaseLayer {
   // absent = bare photo (unchanged). Additive/optional, so single-panel framed
   // templates still serialize as v1 — an old renderer just draws the bare photo.
   frameAssetId?: string;
+  // Optional designer-placed photo (a "photo" asset in the catalog) shipped
+  // with the template; the app user can still replace it. Additive/optional
+  // like frameAssetId — an old renderer just shows the empty slot.
+  imageAssetId?: string;
 }
 
 export interface TextLayer extends BaseLayer {
@@ -78,6 +82,7 @@ export interface GridCell {
   colSpan?: number; // default 1 — lets a cell straddle tracks ("1 big + 2 small")
   rowSpan?: number;
   borderRadius?: number; // per-cell override; falls back to the grid's cornerRadius
+  imageAssetId?: string; // optional designer-placed photo (see ImageLayer)
 }
 
 // A unified photo grid: one placeable/rotatable element that tiles its box into

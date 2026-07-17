@@ -6,8 +6,15 @@ import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
 import { useAssetStore } from "@/store/assetStore";
 import { resolveFrame } from "@/lib/assets/catalog";
+import {
+  coverCrop,
+  pickPhotoFile,
+  resolvePhoto,
+  uploadPhotoAsset,
+} from "@/lib/assets/photo";
 import { cellRect } from "@/lib/template/grid";
 import type {
+  GridCell,
   GridLayer,
   ImageLayer,
   Layer,
@@ -143,11 +150,15 @@ function placeholderLabelSize(width: number, height: number) {
 
 function ImageSlotNode({ layer }: { layer: ImageLayer }) {
   const { handlers, updateLayer } = useLayerInteraction(layer);
+  const beginHistory = useEditorStore((s) => s.beginHistory);
   const assets = useAssetStore((s) => s.assets);
+  const createAsset = useAssetStore((s) => s.create);
   const frame = resolveFrame(layer.frameAssetId, assets);
   const frameImg = useHtmlImage(frame?.src);
+  const photo = resolvePhoto(layer.imageAssetId, assets);
+  const photoImg = useHtmlImage(photo?.dataUrl);
 
-  // The photo (here a placeholder) lives inside the frame's transparent window;
+  // The photo (or its placeholder) lives inside the frame's transparent window;
   // without a frame it fills the whole layer. The frame paints over the top and
   // ignores pointer events so clicks/drags still hit the photo group.
   const win = frame
@@ -159,6 +170,21 @@ function ImageSlotNode({ layer }: { layer: ImageLayer }) {
       }
     : { x: 0, y: 0, width: layer.width, height: layer.height };
 
+  // Double-click = place/replace the slot's photo (upload into the catalog,
+  // reference it from the layer). The properties panel offers the same plus
+  // picking an already-uploaded photo.
+  const placePhoto = async () => {
+    try {
+      const file = await pickPhotoFile();
+      if (!file) return;
+      const record = await uploadPhotoAsset(file, createAsset);
+      beginHistory();
+      updateLayer(layer.id, { imageAssetId: record.id });
+    } catch (e) {
+      console.error("photo upload failed", e);
+    }
+  };
+
   return (
     <Group
       {...handlers}
@@ -168,6 +194,8 @@ function ImageSlotNode({ layer }: { layer: ImageLayer }) {
       height={layer.height}
       rotation={layer.rotation}
       opacity={layer.opacity}
+      onDblClick={placePhoto}
+      onDblTap={placePhoto}
       onTransformEnd={(e) =>
         updateLayer(layer.id, {
           ...normalizedSize(e.target, layer),
@@ -175,30 +203,44 @@ function ImageSlotNode({ layer }: { layer: ImageLayer }) {
         })
       }
     >
-      <Rect
-        x={win.x}
-        y={win.y}
-        width={win.width}
-        height={win.height}
-        fill="#E4E4E7"
-        stroke="#A1A1AA"
-        strokeWidth={4}
-        dash={[16, 12]}
-        cornerRadius={frame ? 0 : layer.borderRadius}
-      />
-      <Text
-        x={win.x}
-        y={win.y}
-        width={win.width}
-        height={win.height}
-        text={`▨\n${layer.slotId}`}
-        align="center"
-        verticalAlign="middle"
-        fontSize={placeholderLabelSize(win.width, win.height)}
-        lineHeight={1.4}
-        fill="#71717A"
-        fontFamily="Inter"
-      />
+      {photoImg ? (
+        <KonvaImage
+          image={photoImg}
+          x={win.x}
+          y={win.y}
+          width={win.width}
+          height={win.height}
+          crop={coverCrop(photoImg, win.width, win.height)}
+          cornerRadius={frame ? 0 : layer.borderRadius}
+        />
+      ) : (
+        <>
+          <Rect
+            x={win.x}
+            y={win.y}
+            width={win.width}
+            height={win.height}
+            fill="#E4E4E7"
+            stroke="#A1A1AA"
+            strokeWidth={4}
+            dash={[16, 12]}
+            cornerRadius={frame ? 0 : layer.borderRadius}
+          />
+          <Text
+            x={win.x}
+            y={win.y}
+            width={win.width}
+            height={win.height}
+            text={`▨\n${layer.slotId}`}
+            align="center"
+            verticalAlign="middle"
+            fontSize={placeholderLabelSize(win.width, win.height)}
+            lineHeight={1.4}
+            fill="#71717A"
+            fontFamily="Inter"
+          />
+        </>
+      )}
       {frame && frameImg && (
         <KonvaImage
           image={frameImg}
@@ -339,6 +381,74 @@ function DividerHandle({
   );
 }
 
+// One fillable cell of the grid. A component (not an inline map) because each
+// cell decodes its own photo; double-click places/replaces it, and the empty
+// state keeps the dashed slot placeholder.
+function GridCellNode({ layer, cell }: { layer: GridLayer; cell: GridCell }) {
+  const updateLayer = useEditorStore((s) => s.updateLayer);
+  const beginHistory = useEditorStore((s) => s.beginHistory);
+  const assets = useAssetStore((s) => s.assets);
+  const createAsset = useAssetStore((s) => s.create);
+  const photo = resolvePhoto(cell.imageAssetId, assets);
+  const photoImg = useHtmlImage(photo?.dataUrl);
+
+  const r = cellRect(layer, cell);
+  const radius = cell.borderRadius ?? layer.cornerRadius;
+
+  const placePhoto = async () => {
+    try {
+      const file = await pickPhotoFile();
+      if (!file) return;
+      const record = await uploadPhotoAsset(file, createAsset);
+      beginHistory();
+      updateLayer(layer.id, {
+        cells: layer.cells.map((c) =>
+          c.slotId === cell.slotId ? { ...c, imageAssetId: record.id } : c
+        ),
+      });
+    } catch (e) {
+      console.error("photo upload failed", e);
+    }
+  };
+
+  return (
+    <Group x={r.x} y={r.y} onDblClick={placePhoto} onDblTap={placePhoto}>
+      {photoImg ? (
+        <KonvaImage
+          image={photoImg}
+          width={r.width}
+          height={r.height}
+          crop={coverCrop(photoImg, r.width, r.height)}
+          cornerRadius={radius}
+        />
+      ) : (
+        <>
+          <Rect
+            width={r.width}
+            height={r.height}
+            fill="#E4E4E7"
+            stroke="#A1A1AA"
+            strokeWidth={3}
+            dash={[14, 10]}
+            cornerRadius={radius}
+          />
+          <Text
+            width={r.width}
+            height={r.height}
+            text={`▨\n${cell.slotId}`}
+            align="center"
+            verticalAlign="middle"
+            fontSize={placeholderLabelSize(r.width, r.height)}
+            lineHeight={1.4}
+            fill="#71717A"
+            fontFamily="Inter"
+          />
+        </>
+      )}
+    </Group>
+  );
+}
+
 function GridNode({ layer }: { layer: GridLayer }) {
   const { handlers, updateLayer } = useLayerInteraction(layer);
   const beginHistory = useEditorStore((s) => s.beginHistory);
@@ -402,34 +512,9 @@ function GridNode({ layer }: { layer: GridLayer }) {
         opacity={layer.gutterColor ? 1 : 0}
         cornerRadius={layer.cornerRadius}
       />
-      {layer.cells.map((cell) => {
-        const r = cellRect(layer, cell);
-        const radius = cell.borderRadius ?? layer.cornerRadius;
-        return (
-          <Group key={cell.slotId} x={r.x} y={r.y}>
-            <Rect
-              width={r.width}
-              height={r.height}
-              fill="#E4E4E7"
-              stroke="#A1A1AA"
-              strokeWidth={3}
-              dash={[14, 10]}
-              cornerRadius={radius}
-            />
-            <Text
-              width={r.width}
-              height={r.height}
-              text={`▨\n${cell.slotId}`}
-              align="center"
-              verticalAlign="middle"
-              fontSize={placeholderLabelSize(r.width, r.height)}
-              lineHeight={1.4}
-              fill="#71717A"
-              fontFamily="Inter"
-            />
-          </Group>
-        );
-      })}
+      {layer.cells.map((cell) => (
+        <GridCellNode key={cell.slotId} layer={layer} cell={cell} />
+      ))}
       {showHandles &&
         Array.from({ length: layer.cols - 1 }, (_, i) => (
           <DividerHandle

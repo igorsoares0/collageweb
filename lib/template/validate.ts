@@ -212,6 +212,13 @@ function validateLayers(
         ) {
           errors.push(`${label}: "frameAssetId" must be a non-empty string`);
         }
+        // Optional designer-placed photo; same catalog-reference rule.
+        if (
+          layer.imageAssetId !== undefined &&
+          !isNonEmptyString(layer.imageAssetId)
+        ) {
+          errors.push(`${label}: "imageAssetId" must be a non-empty string`);
+        }
         break;
       }
       case "text": {
@@ -340,6 +347,9 @@ function validateGrid(
     }
     if (cell.borderRadius !== undefined && !isFiniteNumber(cell.borderRadius)) {
       errors.push(`${clabel}: "borderRadius" must be a number`);
+    }
+    if (cell.imageAssetId !== undefined && !isNonEmptyString(cell.imageAssetId)) {
+      errors.push(`${clabel}: "imageAssetId" must be a non-empty string`);
     }
   });
 }

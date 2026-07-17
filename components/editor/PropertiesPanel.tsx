@@ -7,6 +7,7 @@ import { EDITOR_FONTS } from "@/lib/fonts";
 import { STICKER_ASSETS } from "@/lib/template/factory";
 import { GRID_PRESETS, collectSlotIds } from "@/lib/template/grid";
 import { analyzeImage } from "@/lib/assets/detectWindow";
+import { uploadPhotoAsset } from "@/lib/assets/photo";
 import { resolveFrame, resolveFrames } from "@/lib/assets/catalog";
 import type { ResolvedFrame } from "@/lib/assets/catalog";
 import type {
@@ -248,6 +249,82 @@ function FrameField({
   );
 }
 
+// A photo slot's content: pick an already-uploaded photo from the catalog, or
+// upload a new one (downscaled + saved as a "photo" asset, so it's reusable
+// across templates). Used by the image layer and by every grid cell; the
+// canvas offers the same via double-click on the slot/cell.
+function PhotoField({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string | undefined;
+  onCommit: (imageAssetId: string | undefined) => void;
+}) {
+  const beginHistory = useEditorStore((s) => s.beginHistory);
+  const assets = useAssetStore((s) => s.assets);
+  const createAsset = useAssetStore((s) => s.create);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const photos = assets.filter((a) => a.type === "photo");
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const record = await uploadPhotoAsset(file, createAsset);
+      beginHistory();
+      onCommit(record.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha no upload.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Field label={label}>
+      <select
+        value={value ?? ""}
+        onChange={(e) => {
+          beginHistory();
+          onCommit(e.target.value || undefined);
+        }}
+        className={inputCls}
+      >
+        <option value="">None</option>
+        {photos.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={busy}
+        className="mt-1.5 w-full rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-50"
+      >
+        {busy ? "Uploading…" : "Upload photo…"}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
+    </Field>
+  );
+}
+
 // Grid-specific controls: pick a layout preset (regenerates the cells with
 // fresh slotIds), and tune the shared gutter / corner radius / gutter colour.
 function GridField({
@@ -307,6 +384,20 @@ function GridField({
           </button>
         </div>
       </Field>
+      {layer.cells.map((cell) => (
+        <PhotoField
+          key={cell.slotId}
+          label={`Photo · ${cell.slotId}`}
+          value={cell.imageAssetId}
+          onCommit={(imageAssetId) =>
+            patch({
+              cells: layer.cells.map((c) =>
+                c.slotId === cell.slotId ? { ...c, imageAssetId } : c
+              ),
+            })
+          }
+        />
+      ))}
     </>
   );
 }
@@ -354,6 +445,11 @@ function LayerFields({ layer }: { layer: Layer }) {
             />
           </Field>
           <FrameField layer={layer} patch={patch} />
+          <PhotoField
+            label="Photo"
+            value={layer.imageAssetId}
+            onCommit={(imageAssetId) => patch({ imageAssetId })}
+          />
         </>
       );
     case "text":
