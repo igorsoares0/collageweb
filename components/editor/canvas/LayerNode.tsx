@@ -63,7 +63,7 @@ function snapDelta(edges: number[], guides: number[], threshold: number) {
   return best;
 }
 
-function useLayerInteraction(layer: Layer) {
+function useLayerInteraction(layer: Layer, ghost = false) {
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const updateLayer = useEditorStore((s) => s.updateLayer);
   const beginHistory = useEditorStore((s) => s.beginHistory);
@@ -72,6 +72,14 @@ function useLayerInteraction(layer: Layer) {
 
   const locked = !!layer.editor?.locked;
   const hidden = !!layer.editor?.hidden;
+
+  // Ghost = this layer spilling into a neighbouring panel (carousel bleed).
+  // Pure visuals: no `id` (the Transformer resolves its node by id, which must
+  // stay unique on the stage) and no events — editing happens on the owner
+  // panel's copy.
+  if (ghost) {
+    return { handlers: { visible: !hidden, listening: false }, updateLayer };
+  }
 
   // History is pushed once at gesture start; drag/transform then stream
   // updateLayer (no history) so undo reverts the whole gesture.
@@ -115,6 +123,9 @@ function useLayerInteraction(layer: Layer) {
             threshold
           )
       );
+      // Stream the position so the carousel ghosts on neighbouring panels
+      // follow the drag live; onDragEnd commits the rounded final value.
+      updateLayer(layer.id, { x: e.target.x(), y: e.target.y() });
     },
     onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
       if (e.target !== e.currentTarget) return;
@@ -151,8 +162,8 @@ function placeholderLabelSize(width: number, height: number) {
   return Math.max(28, Math.round(Math.min(width, height) * 0.08));
 }
 
-function ImageSlotNode({ layer }: { layer: ImageLayer }) {
-  const { handlers, updateLayer } = useLayerInteraction(layer);
+function ImageSlotNode({ layer, ghost }: { layer: ImageLayer; ghost?: boolean }) {
+  const { handlers, updateLayer } = useLayerInteraction(layer, ghost);
   const beginHistory = useEditorStore((s) => s.beginHistory);
   const assets = useAssetStore((s) => s.assets);
   const createAsset = useAssetStore((s) => s.create);
@@ -256,8 +267,8 @@ function ImageSlotNode({ layer }: { layer: ImageLayer }) {
   );
 }
 
-function TextNode({ layer }: { layer: TextLayer }) {
-  const { handlers, updateLayer } = useLayerInteraction(layer);
+function TextNode({ layer, ghost }: { layer: TextLayer; ghost?: boolean }) {
+  const { handlers, updateLayer } = useLayerInteraction(layer, ghost);
   return (
     <Text
       {...handlers}
@@ -278,8 +289,8 @@ function TextNode({ layer }: { layer: TextLayer }) {
   );
 }
 
-function ShapeNode({ layer }: { layer: ShapeLayer }) {
-  const { handlers, updateLayer } = useLayerInteraction(layer);
+function ShapeNode({ layer, ghost }: { layer: ShapeLayer; ghost?: boolean }) {
+  const { handlers, updateLayer } = useLayerInteraction(layer, ghost);
   return (
     <Rect
       {...handlers}
@@ -295,8 +306,8 @@ function ShapeNode({ layer }: { layer: ShapeLayer }) {
   );
 }
 
-function StickerNode({ layer }: { layer: StickerLayer }) {
-  const { handlers, updateLayer } = useLayerInteraction(layer);
+function StickerNode({ layer, ghost }: { layer: StickerLayer; ghost?: boolean }) {
+  const { handlers, updateLayer } = useLayerInteraction(layer, ghost);
   return (
     <Group
       {...handlers}
@@ -455,11 +466,13 @@ function GridCellNode({ layer, cell }: { layer: GridLayer; cell: GridCell }) {
   );
 }
 
-function GridNode({ layer }: { layer: GridLayer }) {
-  const { handlers, updateLayer } = useLayerInteraction(layer);
+function GridNode({ layer, ghost }: { layer: GridLayer; ghost?: boolean }) {
+  const { handlers, updateLayer } = useLayerInteraction(layer, ghost);
   const beginHistory = useEditorStore((s) => s.beginHistory);
   const selected = useEditorStore((s) => s.selectedLayerId === layer.id);
-  const showHandles = selected && !layer.editor?.locked;
+  // Never on ghosts — the selected grid's spill on a neighbouring panel must
+  // not repeat the divider chrome.
+  const showHandles = !ghost && selected && !layer.editor?.locked;
 
   const g = layer.gutter;
   const handleW = Math.max(g, Math.max(layer.width, layer.height) * 0.02, 18);
@@ -549,17 +562,25 @@ function GridNode({ layer }: { layer: GridLayer }) {
   );
 }
 
-export default function LayerNode({ layer }: { layer: Layer }) {
+export default function LayerNode({
+  layer,
+  ghost = false,
+}: {
+  layer: Layer;
+  // Renders the layer as a neighbouring panel's inert spill (see
+  // useLayerInteraction).
+  ghost?: boolean;
+}) {
   switch (layer.type) {
     case "image":
-      return <ImageSlotNode layer={layer} />;
+      return <ImageSlotNode layer={layer} ghost={ghost} />;
     case "text":
-      return <TextNode layer={layer} />;
+      return <TextNode layer={layer} ghost={ghost} />;
     case "shape":
-      return <ShapeNode layer={layer} />;
+      return <ShapeNode layer={layer} ghost={ghost} />;
     case "sticker":
-      return <StickerNode layer={layer} />;
+      return <StickerNode layer={layer} ghost={ghost} />;
     case "grid":
-      return <GridNode layer={layer} />;
+      return <GridNode layer={layer} ghost={ghost} />;
   }
 }

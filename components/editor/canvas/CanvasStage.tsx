@@ -269,6 +269,13 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                   <Group
                     key={p.id}
                     x={panelX(i)}
+                    // Panels clip to the canvas: what you see is exactly the
+                    // exported slide, and whatever a layer spills past an edge
+                    // reappears on the neighbour as a ghost (below).
+                    clipX={0}
+                    clipY={0}
+                    clipWidth={cw}
+                    clipHeight={ch}
                     onMouseDown={activate}
                     onTouchStart={activate}
                   >
@@ -281,9 +288,29 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                       onMouseDown={clearOnActive}
                       onTouchStart={clearOnActive}
                     />
+                    {/* Carousel bleed: in the design the panels are contiguous
+                        (the gap is cosmetic), so a neighbour's layers continue
+                        here offset by exactly one canvas width. Ghosts are
+                        inert visuals; editing happens on the owner panel.
+                        Left neighbour under this panel's layers, right one
+                        above — z grows with panel index across the strip. */}
+                    {panels[i - 1] && (
+                      <Group x={-cw} listening={false}>
+                        {panels[i - 1].layers.map((layer) => (
+                          <LayerNode key={layer.id} layer={layer} ghost />
+                        ))}
+                      </Group>
+                    )}
                     {p.layers.map((layer) => (
                       <LayerNode key={layer.id} layer={layer} />
                     ))}
+                    {panels[i + 1] && (
+                      <Group x={cw} listening={false}>
+                        {panels[i + 1].layers.map((layer) => (
+                          <LayerNode key={layer.id} layer={layer} ghost />
+                        ))}
+                      </Group>
+                    )}
                   </Group>
                 );
               })}
