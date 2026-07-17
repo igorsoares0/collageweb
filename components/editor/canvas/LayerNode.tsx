@@ -34,16 +34,42 @@ function useHtmlImage(src?: string): HTMLImageElement | undefined {
   return loaded?.src === src ? loaded?.el : undefined;
 }
 
+// How close (in screen pixels, zoom-independent) an edge must be before it
+// magnets onto a canvas guide. Past this distance the gesture is free, so a
+// layer can still be pushed beyond the canvas on purpose.
+export const SNAP_SCREEN_PX = 8;
+
+// Smallest edge→guide correction within the threshold, or 0 when nothing is
+// close enough to snap.
+function snapDelta(edges: number[], guides: number[], threshold: number) {
+  let best = 0;
+  let bestAbs = threshold;
+  for (const edge of edges) {
+    for (const guide of guides) {
+      const d = guide - edge;
+      if (Math.abs(d) <= bestAbs) {
+        bestAbs = Math.abs(d);
+        best = d;
+      }
+    }
+  }
+  return best;
+}
+
 function useLayerInteraction(layer: Layer) {
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const updateLayer = useEditorStore((s) => s.updateLayer);
   const beginHistory = useEditorStore((s) => s.beginHistory);
+  const canvasWidth = useEditorStore((s) => s.template?.canvas.width ?? 0);
+  const canvasHeight = useEditorStore((s) => s.template?.canvas.height ?? 0);
 
   const locked = !!layer.editor?.locked;
   const hidden = !!layer.editor?.hidden;
 
   // History is pushed once at gesture start; drag/transform then stream
   // updateLayer (no history) so undo reverts the whole gesture.
+  // Drag events bubble up from draggable children (the grid's divider
+  // handles), so every drag handler ignores anything but the node itself.
   const handlers = {
     id: layer.id,
     draggable: !locked,
@@ -51,15 +77,42 @@ function useLayerInteraction(layer: Layer) {
     listening: !locked,
     onClick: () => selectLayer(layer.id),
     onTap: () => selectLayer(layer.id),
-    onDragStart: () => {
+    onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (e.target !== e.currentTarget) return;
       selectLayer(layer.id);
       beginHistory();
     },
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) =>
+    onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (e.target !== e.currentTarget) return;
+      const stage = e.target.getStage();
+      if (!stage || !canvasWidth) return;
+      const threshold = SNAP_SCREEN_PX / (stage.scaleX() || 1);
+      // relativeTo the stage = template units, rotation already accounted for.
+      const box = e.target.getClientRect({ relativeTo: stage });
+      e.target.x(
+        e.target.x() +
+          snapDelta(
+            [box.x, box.x + box.width / 2, box.x + box.width],
+            [0, canvasWidth / 2, canvasWidth],
+            threshold
+          )
+      );
+      e.target.y(
+        e.target.y() +
+          snapDelta(
+            [box.y, box.y + box.height / 2, box.y + box.height],
+            [0, canvasHeight / 2, canvasHeight],
+            threshold
+          )
+      );
+    },
+    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (e.target !== e.currentTarget) return;
       updateLayer(layer.id, {
         x: Math.round(e.target.x()),
         y: Math.round(e.target.y()),
-      }),
+      });
+    },
     onTransformStart: () => beginHistory(),
   };
 

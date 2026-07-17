@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Stage, Layer as KonvaLayer, Rect, Transformer } from "react-konva";
 import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
-import LayerNode from "./LayerNode";
+import LayerNode, { SNAP_SCREEN_PX } from "./LayerNode";
 
 const MIN_LAYER_SIZE = 20;
 
@@ -163,6 +163,44 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                   const min = MIN_LAYER_SIZE * scale;
                   if (Math.abs(newBox.width) < min || Math.abs(newBox.height) < min) {
                     return oldBox;
+                  }
+                  // Resizing: the edges this gesture moves magnet onto the
+                  // canvas bounds, but only within the threshold —
+                  // overshooting past the canvas stays free. Skipped when the
+                  // layer is rotated (the box no longer lines up with the
+                  // canvas). Boxes here are in screen pixels.
+                  const rot = selectedLayer
+                    ? "rotation" in selectedLayer
+                      ? Math.abs(selectedLayer.rotation) % 360
+                      : 0
+                    : NaN;
+                  if (rot < 0.5 || rot > 359.5) {
+                    const box = { ...newBox };
+                    const canvasW = template.canvas.width * scale;
+                    const canvasH = template.canvas.height * scale;
+                    if (box.x !== oldBox.x && Math.abs(box.x) <= SNAP_SCREEN_PX) {
+                      box.width += box.x;
+                      box.x = 0;
+                    }
+                    const right = box.x + box.width;
+                    if (
+                      right !== oldBox.x + oldBox.width &&
+                      Math.abs(right - canvasW) <= SNAP_SCREEN_PX
+                    ) {
+                      box.width = canvasW - box.x;
+                    }
+                    if (box.y !== oldBox.y && Math.abs(box.y) <= SNAP_SCREEN_PX) {
+                      box.height += box.y;
+                      box.y = 0;
+                    }
+                    const bottom = box.y + box.height;
+                    if (
+                      bottom !== oldBox.y + oldBox.height &&
+                      Math.abs(bottom - canvasH) <= SNAP_SCREEN_PX
+                    ) {
+                      box.height = canvasH - box.y;
+                    }
+                    return box;
                   }
                   return newBox;
                 }}
