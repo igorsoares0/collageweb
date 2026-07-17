@@ -33,17 +33,35 @@ function validWindow(w: unknown): w is FrameWindow {
   );
 }
 
-export async function GET() {
+// ?types=frame,sticker narrows the catalog. The app uses it to skip "photo"
+// assets — designer photos are template content, delivered inside each
+// template's own response (see /api/templates/[id]), never in the global
+// catalog every user downloads. No param = everything (the web editor's view).
+export async function GET(request: Request) {
   const sql = getDb();
   if (!sql) {
     return Response.json({ error: "DATABASE_URL not configured" }, { status: 503 });
   }
-  const rows = await sql`
-    SELECT id, type, name, data_url AS "dataUrl", aspect, "window",
-           created_at AS "createdAt"
-    FROM assets
-    ORDER BY created_at DESC
-  `;
+  const typesParam = new URL(request.url).searchParams.get("types");
+  const types = typesParam
+    ? typesParam
+        .split(",")
+        .filter((t): t is AssetType => TYPES.includes(t as AssetType))
+    : null;
+  const rows = types
+    ? await sql`
+        SELECT id, type, name, data_url AS "dataUrl", aspect, "window",
+               created_at AS "createdAt"
+        FROM assets
+        WHERE type = ANY(${types})
+        ORDER BY created_at DESC
+      `
+    : await sql`
+        SELECT id, type, name, data_url AS "dataUrl", aspect, "window",
+               created_at AS "createdAt"
+        FROM assets
+        ORDER BY created_at DESC
+      `;
   return Response.json(rows);
 }
 
