@@ -37,6 +37,7 @@ export default function EditorShell({ id }: { id: string }) {
   const redo = useEditorStore((s) => s.redo);
   const removeLayer = useEditorStore((s) => s.removeLayer);
   const duplicateLayer = useEditorStore((s) => s.duplicateLayer);
+  const setZoom = useEditorStore((s) => s.setZoom);
 
   const [status, setStatus] = useState<"loading" | "ready" | "missing">(
     "loading"
@@ -98,6 +99,15 @@ export default function EditorShell({ id }: { id: string }) {
       } else if (mod && e.key.toLowerCase() === "y") {
         e.preventDefault();
         redo();
+      } else if (mod && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        setZoom(useEditorStore.getState().zoom * 1.25);
+      } else if (mod && e.key === "-") {
+        e.preventDefault();
+        setZoom(useEditorStore.getState().zoom / 1.25);
+      } else if (mod && e.key === "0") {
+        e.preventDefault();
+        setZoom(1);
       } else if (mod && e.key.toLowerCase() === "d") {
         const selected = useEditorStore.getState().selectedLayerId;
         if (selected) {
@@ -114,7 +124,7 @@ export default function EditorShell({ id }: { id: string }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undo, redo, removeLayer, duplicateLayer]);
+  }, [undo, redo, removeLayer, duplicateLayer, setZoom]);
 
   if (status === "missing") {
     return (

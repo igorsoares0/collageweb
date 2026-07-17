@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Group, Stage, Layer as KonvaLayer, Rect, Transformer } from "react-konva";
 import type Konva from "konva";
 import { useEditorStore } from "@/store/editorStore";
@@ -21,14 +21,50 @@ export default function CanvasStage({ registerThumbnail }: Props) {
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const selectPanel = useEditorStore((s) => s.selectPanel);
+  const zoom = useEditorStore((s) => s.zoom);
+  const setZoom = useEditorStore((s) => s.setZoom);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const contentLayerRef = useRef<Konva.Layer>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
+  // Set when a zoom wants a screen point to stay put; consumed after the
+  // rescaled stage lays out, by adjusting the container's scroll.
+  const pendingAnchorRef = useRef<{
+    contentX: number;
+    contentY: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+
+  // Render-fresh values for the once-registered native wheel listener and the
+  // post-render scroll adjustment.
+  const zoomToRef = useRef<
+    ((next: number, clientX?: number, clientY?: number) => void) | null
+  >(null);
 
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [, setFontsTick] = useState(0);
+
+  // Ctrl/Cmd + wheel (including trackpad pinch, which reports as ctrl+wheel)
+  // zooms anchored at the pointer. Native non-passive listener — React's
+  // synthetic wheel can't preventDefault the browser's own page zoom.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomToRef.current?.(
+        useEditorStore.getState().zoom * Math.exp(-e.deltaY * 0.002),
+        e.clientX,
+        e.clientY
+      );
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -110,20 +146,58 @@ export default function CanvasStage({ registerThumbnail }: Props) {
     transformer.nodes(node ? [node] : []);
   }, [selectedLayerId, transformable, template]);
 
-  if (!template || !panel) return null;
-
-  const { width: cw, height: ch } = template.canvas;
+  const cw = template?.canvas.width ?? 1;
+  const ch = template?.canvas.height ?? 1;
   const gap = cw * PANEL_GAP_FRACTION;
 
   // Scale fits ONE panel in the viewport (unchanged from the single-panel
-  // days); with several panels the stage grows sideways and the container
-  // scrolls horizontally, like the app's panel strip.
+  // days), multiplied by the user zoom (1 = fit); whatever overflows — extra
+  // panels sideways or zoomed-in content — the container scrolls.
   const scale =
     viewport.width > 0 && viewport.height > 0
-      ? Math.min(viewport.width / cw, viewport.height / ch) * 0.95
+      ? Math.min(viewport.width / cw, viewport.height / ch) * 0.95 * zoom
       : 0;
   const totalWidth = panels.length * cw + (panels.length - 1) * gap;
   const panelX = (i: number) => i * (cw + gap);
+
+  // Zoom keeping a screen point anchored — the pointer for wheel zooms, the
+  // viewport centre for the buttons.
+  const zoomTo = (next: number, clientX?: number, clientY?: number) => {
+    const container = containerRef.current;
+    const wrap = wrapRef.current;
+    if (container && wrap && scale > 0) {
+      const box = container.getBoundingClientRect();
+      const cx = clientX ?? box.left + box.width / 2;
+      const cy = clientY ?? box.top + box.height / 2;
+      const rect = wrap.getBoundingClientRect();
+      pendingAnchorRef.current = {
+        contentX: (cx - rect.left) / scale,
+        contentY: (cy - rect.top) / scale,
+        clientX: cx,
+        clientY: cy,
+      };
+    }
+    setZoom(next);
+  };
+
+  // Publishes the render-fresh zoomTo for the native wheel listener, then
+  // consumes any pending anchor: after a zoom renders, shift the scroll so the
+  // anchored screen point keeps the same content under it (best-effort; the
+  // browser clamps the scroll).
+  useLayoutEffect(() => {
+    zoomToRef.current = zoomTo;
+    const anchor = pendingAnchorRef.current;
+    pendingAnchorRef.current = null;
+    if (!anchor) return;
+    const container = containerRef.current;
+    const wrap = wrapRef.current;
+    if (!container || !wrap || scale <= 0) return;
+    const rect = wrap.getBoundingClientRect();
+    container.scrollLeft += rect.left + anchor.contentX * scale - anchor.clientX;
+    container.scrollTop += rect.top + anchor.contentY * scale - anchor.clientY;
+  });
+
+  if (!template || !panel) return null;
 
   // Per-type transform abilities: rotation exists for image and grid; text has
   // no height (auto), so only horizontal resizing.
@@ -149,7 +223,10 @@ export default function CanvasStage({ registerThumbnail }: Props) {
     if (e.target === e.target.getStage()) selectLayer(null);
   };
 
+  const zoomBtn = "px-2 py-1 text-sm text-zinc-300 hover:bg-zinc-800";
+
   return (
+    <div className="relative h-full w-full">
     <div
       ref={containerRef}
       // Clicking the dark area around the canvas deselects too — the Stage's
@@ -162,7 +239,7 @@ export default function CanvasStage({ registerThumbnail }: Props) {
       {scale > 0 && (
         // m-auto centers when everything fits and still lets the container
         // scroll when the panel row overflows (justify-center would clip it).
-        <div className="m-auto">
+        <div ref={wrapRef} className="m-auto">
           <Stage
             ref={stageRef}
             width={Math.round(totalWidth * scale)}
@@ -287,6 +364,33 @@ export default function CanvasStage({ registerThumbnail }: Props) {
           </Stage>
         </div>
       )}
+    </div>
+      <div className="absolute bottom-3 right-3 z-10 flex items-center overflow-hidden rounded-md border border-zinc-700 bg-zinc-900/90">
+        <button
+          type="button"
+          className={zoomBtn}
+          title="Zoom out (Ctrl+-)"
+          onClick={() => zoomTo(zoom / 1.25)}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="w-12 py-1 text-center text-[11px] text-zinc-300 hover:bg-zinc-800"
+          title="Reset zoom (Ctrl+0)"
+          onClick={() => zoomTo(1)}
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          type="button"
+          className={zoomBtn}
+          title="Zoom in (Ctrl+=)"
+          onClick={() => zoomTo(zoom * 1.25)}
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }

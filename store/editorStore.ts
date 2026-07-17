@@ -21,6 +21,9 @@ interface EditorState {
   template: Template | null;
   activePanelId: string | null;
   selectedLayerId: string | null;
+  // View zoom, multiplying the fit-to-viewport scale (1 = fit). Not part of
+  // the template, so never dirties or enters history.
+  zoom: number;
   dirty: boolean;
   past: Template[];
   future: Template[];
@@ -38,6 +41,7 @@ interface EditorState {
   // Reshape a grid layer to a named preset (fresh, template-unique cell slotIds).
   applyGridPreset: (id: string, presetId: string) => void;
   selectLayer: (id: string | null) => void;
+  setZoom: (zoom: number) => void;
   toggleLock: (id: string) => void;
   toggleHide: (id: string) => void;
   // Panel (carousel slide) management.
@@ -121,6 +125,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
     template: null,
     activePanelId: null,
     selectedLayerId: null,
+    zoom: 1,
     dirty: false,
     past: [],
     future: [],
@@ -130,6 +135,7 @@ export const useEditorStore = create<EditorState>((set, get) => {
         template: structuredClone(template),
         activePanelId: template.panels[0]?.id ?? null,
         selectedLayerId: null,
+        zoom: 1,
         dirty: false,
         past: [],
         future: [],
@@ -239,6 +245,8 @@ export const useEditorStore = create<EditorState>((set, get) => {
     },
 
     selectLayer: (id) => set({ selectedLayerId: id }),
+
+    setZoom: (zoom) => set({ zoom: Math.min(4, Math.max(0.25, zoom)) }),
 
     toggleLock: (id) =>
       mutatePanel((p) => ({
