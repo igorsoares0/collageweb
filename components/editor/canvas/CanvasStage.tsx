@@ -292,8 +292,12 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                         (the gap is cosmetic), so a neighbour's layers continue
                         here offset by exactly one canvas width. Ghosts are
                         inert visuals; editing happens on the owner panel.
-                        Left neighbour under this panel's layers, right one
-                        above — z grows with panel index across the strip. */}
+                        BOTH neighbour ghosts render UNDER this panel's own
+                        layers: they're cosmetic echoes for swipe continuity, so
+                        a local element (text, sticker…) always sits above an
+                        image spilling in from an adjacent panel — and stays
+                        reorderable against the panel's real layers. (Mirrors
+                        PanelCanvas in the mobile app.) */}
                     {panels[i - 1] && (
                       <Group x={-cw} listening={false}>
                         {panels[i - 1].layers.map((layer) => (
@@ -301,9 +305,6 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                         ))}
                       </Group>
                     )}
-                    {p.layers.map((layer) => (
-                      <LayerNode key={layer.id} layer={layer} />
-                    ))}
                     {panels[i + 1] && (
                       <Group x={cw} listening={false}>
                         {panels[i + 1].layers.map((layer) => (
@@ -311,6 +312,9 @@ export default function CanvasStage({ registerThumbnail }: Props) {
                         ))}
                       </Group>
                     )}
+                    {p.layers.map((layer) => (
+                      <LayerNode key={layer.id} layer={layer} />
+                    ))}
                   </Group>
                 );
               })}
