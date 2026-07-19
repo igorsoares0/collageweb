@@ -132,6 +132,46 @@ export interface Panel {
 // contains a grid (see serializeTemplate), so grid-free templates stay v1/v2.
 export const CURRENT_SCHEMA_VERSION = 3;
 
+// ---------------------------------------------------------------------------
+// v4: the continuous canvas (Modelo B). See docs/model-b-migration.md.
+//
+// STATUS: types only. Nothing authors or serializes v4 yet — CURRENT_SCHEMA_VERSION
+// is deliberately still 3, and serializeTemplate is untouched. Bumping either
+// before the renderers can DRAW a continuous canvas would ship templates the
+// Flutter app must skip. The gate opens in the rollout phase, not here.
+//
+// The model: instead of N independent panels, one canvas `slideCount` slides
+// wide, with every layer in a SINGLE coordinate system (x from 0 to
+// contentWidth). "Slides" are just cut lines; slicing happens at export. This
+// is a SUPERSET of the panel model — independent slides are the degenerate case
+// where no layer crosses a cut, and a panorama is one layer whose x spans them.
+export const CONTINUOUS_SCHEMA_VERSION = 4;
+
+export interface ContinuousCanvas {
+  slideWidth: number;
+  slideHeight: number;
+  slideCount: number;
+  // Space BETWEEN slides. 0 for a seamless carousel; > 0 separates the cuts.
+  gutter: number;
+}
+
+// A v4 template. Note what is absent: no panels, and no `slideIndex` on a
+// layer. Which slide a layer belongs to is DERIVED from its geometry (see
+// lib/template/continuous.ts) and never persisted — that is what keeps the
+// model a clean superset instead of a hybrid.
+export interface ContinuousTemplate {
+  id: string;
+  schemaVersion: number; // CONTINUOUS_SCHEMA_VERSION
+  version: number;
+  name: string;
+  aspectRatio: AspectRatio;
+  canvas: ContinuousCanvas;
+  // The one naturally per-slide datum. length === canvas.slideCount.
+  slideBackgrounds: string[];
+  // Continuous coordinates: 0 .. contentWidth(canvas).
+  layers: Layer[];
+}
+
 // Canonical in-memory shape: always a panels array (length >= 1). The wire
 // shape is back-compat: 1 panel serializes as classic v1 (canvas.backgroundColor
 // + layers), >1 as v2 (panels). See normalizeTemplate/serializeTemplate.
