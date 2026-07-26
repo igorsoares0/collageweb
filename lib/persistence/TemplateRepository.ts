@@ -5,6 +5,9 @@ export interface TemplateRecord {
   template: Template;
   category?: Category;
   premium: boolean;
+  // Whether this template is exposed to the mobile app's catalog. Defaults to
+  // false (unpublished) for new templates; the app filters on it.
+  published: boolean;
   thumbnailDataUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -18,6 +21,7 @@ export interface TemplateSummary {
   aspectRatio: AspectRatio;
   category?: Category;
   premium: boolean;
+  published: boolean;
   thumbnailDataUrl?: string;
   updatedAt: string;
 }

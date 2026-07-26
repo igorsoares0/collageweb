@@ -39,7 +39,7 @@ export async function GET(_request: Request, context: Context) {
   }
   const { id } = await context.params;
   const rows = await sql`
-    SELECT category, premium, thumbnail_url AS "thumbnailDataUrl",
+    SELECT category, premium, published, thumbnail_url AS "thumbnailDataUrl",
            template_json AS "template",
            created_at AS "createdAt", updated_at AS "updatedAt"
     FROM templates

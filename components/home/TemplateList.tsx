@@ -33,6 +33,7 @@ export default function TemplateList() {
       // Store the wire shape (a brand-new template is single-panel → v1).
       template: serializeTemplate(template) as unknown as typeof template,
       premium: false,
+      published: false,
       createdAt: now,
       updatedAt: now,
     });
@@ -59,7 +60,13 @@ export default function TemplateList() {
       template.name = `${template.name} (copy)`;
     }
     const now = new Date().toISOString();
-    await repo.save({ template, premium: false, createdAt: now, updatedAt: now });
+    await repo.save({
+      template,
+      premium: false,
+      published: false,
+      createdAt: now,
+      updatedAt: now,
+    });
     refresh();
   };
 

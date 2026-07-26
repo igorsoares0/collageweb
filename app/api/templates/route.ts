@@ -11,7 +11,7 @@ export async function GET() {
     SELECT id, name,
            COALESCE((template_json->>'schemaVersion')::int, 1) AS "schemaVersion",
            template_json->>'aspectRatio' AS "aspectRatio",
-           category, premium, thumbnail_url AS "thumbnailDataUrl",
+           category, premium, published, thumbnail_url AS "thumbnailDataUrl",
            updated_at AS "updatedAt"
     FROM templates
     ORDER BY updated_at DESC
@@ -42,15 +42,17 @@ export async function POST(request: Request) {
 
   const t = record.template;
   await sql`
-    INSERT INTO templates (id, name, version, category, premium, thumbnail_url, template_json, created_at, updated_at)
+    INSERT INTO templates (id, name, version, category, premium, published, thumbnail_url, template_json, created_at, updated_at)
     VALUES (${t.id}, ${t.name}, ${t.version}, ${record.category ?? null},
-            ${record.premium ?? false}, ${record.thumbnailDataUrl ?? null},
+            ${record.premium ?? false}, ${record.published ?? false},
+            ${record.thumbnailDataUrl ?? null},
             ${JSON.stringify(t)}::jsonb, now(), now())
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       version = EXCLUDED.version,
       category = EXCLUDED.category,
       premium = EXCLUDED.premium,
+      published = EXCLUDED.published,
       thumbnail_url = EXCLUDED.thumbnail_url,
       template_json = EXCLUDED.template_json,
       updated_at = now()

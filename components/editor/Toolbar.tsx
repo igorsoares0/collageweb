@@ -58,6 +58,7 @@ export default function Toolbar({ meta, onMetaChange, getThumbnail }: Props) {
       template: wire as unknown as typeof candidate,
       category: meta.category,
       premium: meta.premium,
+      published: meta.published,
       thumbnailDataUrl: getThumbnail(),
       createdAt: meta.createdAt,
       updatedAt: new Date().toISOString(),
@@ -144,6 +145,19 @@ export default function Toolbar({ meta, onMetaChange, getThumbnail }: Props) {
             }
           />
           Premium
+        </label>
+        <label
+          className="flex items-center gap-1.5 text-xs text-zinc-400"
+          title="When on, this template appears in the mobile app catalog"
+        >
+          <input
+            type="checkbox"
+            checked={meta.published}
+            onChange={(e) =>
+              onMetaChange({ ...meta, published: e.target.checked })
+            }
+          />
+          Publish to app
         </label>
 
         <div className="mx-1 h-6 w-px bg-zinc-800" />

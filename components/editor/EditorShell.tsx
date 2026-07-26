@@ -27,6 +27,7 @@ const CanvasStage = dynamic(() => import("./canvas/CanvasStage"), {
 export interface RecordMeta {
   category?: Category;
   premium: boolean;
+  published: boolean;
   createdAt: string;
 }
 
@@ -44,6 +45,7 @@ export default function EditorShell({ id }: { id: string }) {
   );
   const [meta, setMeta] = useState<RecordMeta>({
     premium: false,
+    published: false,
     createdAt: new Date().toISOString(),
   });
 
@@ -74,6 +76,9 @@ export default function EditorShell({ id }: { id: string }) {
         setMeta({
           category: record.category,
           premium: record.premium,
+          // Back-compat: records saved before this field existed have no
+          // `published` key — treat them as unpublished until re-saved.
+          published: record.published ?? false,
           createdAt: record.createdAt,
         });
         setStatus("ready");

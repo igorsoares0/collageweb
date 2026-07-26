@@ -28,6 +28,7 @@ function toSummary(record: TemplateRecord): TemplateSummary {
     aspectRatio: record.template.aspectRatio,
     category: record.category,
     premium: record.premium,
+    published: record.published,
     thumbnailDataUrl: record.thumbnailDataUrl,
     updatedAt: record.updatedAt,
   };

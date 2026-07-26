@@ -17,12 +17,24 @@ await sql`
     version integer NOT NULL,
     category text,
     premium boolean NOT NULL DEFAULT false,
+    published boolean NOT NULL DEFAULT false,
     thumbnail_url text,
     template_json jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
   )
 `;
+
+// Migration for databases created before `published` existed. Idempotent:
+//  1. add the column as nullable (existing rows become NULL);
+//  2. grandfather every pre-existing row to published=true so nothing that was
+//     already live in the app disappears — new templates always arrive with an
+//     explicit value from the editor, so they are never NULL here;
+//  3. lock the column down with the product default (false) for future rows.
+await sql`ALTER TABLE templates ADD COLUMN IF NOT EXISTS published boolean`;
+await sql`UPDATE templates SET published = true WHERE published IS NULL`;
+await sql`ALTER TABLE templates ALTER COLUMN published SET DEFAULT false`;
+await sql`ALTER TABLE templates ALTER COLUMN published SET NOT NULL`;
 
 const [{ count }] = await sql`SELECT count(*)::int AS count FROM templates`;
 console.log(`OK — "templates" table ready (${count} row(s)).`);
