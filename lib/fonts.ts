@@ -36,6 +36,30 @@ const FONT_WEIGHTS: Record<string, readonly number[]> = {
 
 export const EDITOR_FONTS: readonly string[] = Object.keys(FONT_WEIGHTS);
 
+// Paid-plan-only families (~70% of the catalog). Unlike assets, fonts aren't
+// uploaded or stored in a DB — they're a fixed curated list — so "which are
+// premium" is a product decision baked in code, not a per-template toggle. This
+// set is mirrored in the app's text_style_bar.dart (kPremiumFonts). The editor
+// NEVER restricts the designer; it only badges these. The app enforces the gate
+// when an end-user picks one for their own text (a template that already uses a
+// premium font still renders for everyone — same as premium assets).
+export const PREMIUM_FONTS: ReadonlySet<string> = new Set([
+  "Raleway",
+  "Work Sans",
+  "Oswald",
+  "Bebas Neue",
+  "Anton",
+  "Archivo Black",
+  "Playfair Display",
+  "Cormorant Garamond",
+  "DM Serif Display",
+  "Abril Fatface",
+  "Dancing Script",
+  "Caveat",
+  "Pacifico",
+  "Lobster",
+]);
+
 export const GOOGLE_FONTS_CSS_URL =
   "https://fonts.googleapis.com/css2?" +
   Object.entries(FONT_WEIGHTS)

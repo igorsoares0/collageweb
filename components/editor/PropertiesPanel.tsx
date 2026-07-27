@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { useAssetStore } from "@/store/assetStore";
-import { EDITOR_FONTS } from "@/lib/fonts";
+import { EDITOR_FONTS, PREMIUM_FONTS } from "@/lib/fonts";
 import { STICKER_ASSETS } from "@/lib/template/factory";
 import { GRID_PRESETS, collectSlotIds } from "@/lib/template/grid";
 import { analyzeImage } from "@/lib/assets/detectWindow";
@@ -125,11 +125,15 @@ function SelectField({
   value,
   options,
   onCommit,
+  labelFor,
 }: {
   label: string;
   value: string;
   options: readonly string[];
   onCommit: (v: string) => void;
+  // Maps an option value to its display text (value is unchanged). Used to tag
+  // premium fonts without a separate widget.
+  labelFor?: (v: string) => string;
 }) {
   const beginHistory = useEditorStore((s) => s.beginHistory);
   return (
@@ -144,7 +148,7 @@ function SelectField({
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {labelFor ? labelFor(o) : o}
           </option>
         ))}
       </select>
@@ -650,6 +654,7 @@ function LayerFields({ layer }: { layer: Layer }) {
             value={layer.fontFamily}
             options={EDITOR_FONTS}
             onCommit={(fontFamily) => patch({ fontFamily })}
+            labelFor={(f) => (PREMIUM_FONTS.has(f) ? `${f} · PRO` : f)}
           />
           <div className="grid grid-cols-2 gap-2">
             <NumberField label="Font size" value={layer.fontSize} onCommit={(fontSize) => patch({ fontSize })} min={1} />
