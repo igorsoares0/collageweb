@@ -30,6 +30,17 @@ export class ApiAssetRepository implements AssetRepository {
     return res.json();
   }
 
+  async setPremium(id: string, premium: boolean): Promise<AssetRecord> {
+    const res = await expectOk(
+      await fetch(`/api/assets/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ premium }),
+      })
+    );
+    return res.json();
+  }
+
   async remove(id: string): Promise<void> {
     await expectOk(
       await fetch(`/api/assets/${encodeURIComponent(id)}`, {

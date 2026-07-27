@@ -51,14 +51,14 @@ export async function GET(request: Request) {
   const rows = types
     ? await sql`
         SELECT id, type, name, data_url AS "dataUrl", aspect, "window",
-               created_at AS "createdAt"
+               premium, created_at AS "createdAt"
         FROM assets
         WHERE type = ANY(${types})
         ORDER BY created_at DESC
       `
     : await sql`
         SELECT id, type, name, data_url AS "dataUrl", aspect, "window",
-               created_at AS "createdAt"
+               premium, created_at AS "createdAt"
         FROM assets
         ORDER BY created_at DESC
       `;
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     return badRequest("Invalid JSON body");
   }
 
-  const { type, name, dataUrl, aspect, window } = body;
+  const { type, name, dataUrl, aspect, window, premium } = body;
 
   if (typeof type !== "string" || !TYPES.includes(type as AssetType)) {
     return badRequest(`"type" must be one of: ${TYPES.join(", ")}`);
@@ -100,16 +100,21 @@ export async function POST(request: Request) {
     return badRequest('"window" is required for frames (x,y,w,h in 0..1)');
   }
   const win: FrameWindow | null = type === "frame" ? (window as FrameWindow) : null;
+  // Optional; absent or non-boolean falls back to free (matches the DB default).
+  if (premium !== undefined && typeof premium !== "boolean") {
+    return badRequest('"premium" must be a boolean');
+  }
+  const isPremium = premium === true;
 
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   await sql`
-    INSERT INTO assets (id, type, name, data_url, aspect, "window", created_at)
+    INSERT INTO assets (id, type, name, data_url, aspect, "window", premium, created_at)
     VALUES (${id}, ${type}, ${name}, ${dataUrl}, ${aspect},
-            ${win ? JSON.stringify(win) : null}::jsonb, ${createdAt})
+            ${win ? JSON.stringify(win) : null}::jsonb, ${isPremium}, ${createdAt})
   `;
   return Response.json(
-    { id, type, name, dataUrl, aspect, window: win, createdAt },
+    { id, type, name, dataUrl, aspect, window: win, premium: isPremium, createdAt },
     { status: 201 }
   );
 }

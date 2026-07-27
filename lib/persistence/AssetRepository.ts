@@ -26,6 +26,9 @@ export interface AssetRecord {
   aspect: number;
   // Frames only; null for stickers.
   window: FrameWindow | null;
+  // Whether the app gates this asset behind a paid plan. Defaults to false
+  // (free) for new assets; the app enforces the lock, the editor just marks it.
+  premium: boolean;
   createdAt: string;
 }
 
@@ -36,6 +39,8 @@ export interface NewAsset {
   dataUrl: string;
   aspect: number;
   window: FrameWindow | null;
+  // Optional at creation; omitted means free (the server defaults it to false).
+  premium?: boolean;
 }
 
 // Async seam (mirrors TemplateRepository): Neon-backed in the app, localStorage
@@ -43,5 +48,7 @@ export interface NewAsset {
 export interface AssetRepository {
   list(): Promise<AssetRecord[]>;
   create(asset: NewAsset): Promise<AssetRecord>;
+  // Flips the paid-plan gate on an existing asset; returns the updated record.
+  setPremium(id: string, premium: boolean): Promise<AssetRecord>;
   remove(id: string): Promise<void>;
 }

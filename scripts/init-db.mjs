@@ -51,9 +51,18 @@ await sql`
     aspect double precision NOT NULL,
     -- "window" is a reserved SQL keyword (WINDOW clause) — must stay quoted.
     "window" jsonb,
+    -- Whether this asset is gated to paid plans in the app; the editor marks
+    -- it, the app enforces it (mirrors templates.premium).
+    premium boolean NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT now()
   )
 `;
+
+// Migration for asset tables created before `premium` existed. Unlike
+// templates.published, existing assets should stay FREE (nothing that was
+// already usable becomes locked), which is exactly the column default — so a
+// single idempotent ADD COLUMN is enough, no grandfathering pass.
+await sql`ALTER TABLE assets ADD COLUMN IF NOT EXISTS premium boolean NOT NULL DEFAULT false`;
 
 const [{ count: assetCount }] =
   await sql`SELECT count(*)::int AS count FROM assets`;

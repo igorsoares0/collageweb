@@ -8,12 +8,14 @@ import { STICKER_ASSETS } from "@/lib/template/factory";
 import { GRID_PRESETS, collectSlotIds } from "@/lib/template/grid";
 import { analyzeImage } from "@/lib/assets/detectWindow";
 import { uploadPhotoAsset } from "@/lib/assets/photo";
+import { uploadStickerAsset } from "@/lib/assets/sticker";
 import { resolveFrame, resolveFrames } from "@/lib/assets/catalog";
 import type { ResolvedFrame } from "@/lib/assets/catalog";
 import type {
   GridLayer,
   ImageLayer,
   Layer,
+  StickerLayer,
   TextAlignment,
 } from "@/lib/template/types";
 
@@ -164,10 +166,18 @@ function FrameField({
   const beginHistory = useEditorStore((s) => s.beginHistory);
   const assets = useAssetStore((s) => s.assets);
   const createAsset = useAssetStore((s) => s.create);
+  const setAssetPremium = useAssetStore((s) => s.setPremium);
   const frames = resolveFrames(assets);
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The premium toggle applies to catalog (uploaded) frames only — bundled
+  // seeds have no DB row to mark. So it shows only when the selected frame
+  // resolves to an asset in the catalog.
+  const selectedAsset = assets.find(
+    (a) => a.id === layer.frameAssetId && a.type === "frame"
+  );
 
   // Snap the layer's height to the frame's aspect so it never stretches;
   // clearing the frame leaves the current dimensions alone.
@@ -244,6 +254,122 @@ function FrameField({
           e.target.value = "";
         }}
       />
+      {selectedAsset && (
+        <label
+          className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-400"
+          title="When on, this frame is locked to paid plans in the app"
+        >
+          <input
+            type="checkbox"
+            checked={selectedAsset.premium}
+            onChange={(e) => setAssetPremium(selectedAsset.id, e.target.checked)}
+          />
+          Premium (paid plans only)
+        </label>
+      )}
+      {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
+    </Field>
+  );
+}
+
+// The sticker picker: choose a bundled placeholder or an uploaded catalog
+// sticker, or upload a new PNG. Like frames, the web canvas only draws a
+// placeholder — the app renders the real art — so uploading a sticker is really
+// "add it to the catalog". The Premium checkbox (catalog stickers only) marks
+// it paid-plan-only; the app enforces the gate.
+function StickerField({
+  layer,
+  patch,
+}: {
+  layer: StickerLayer;
+  patch: (p: Partial<Layer>) => void;
+}) {
+  const beginHistory = useEditorStore((s) => s.beginHistory);
+  const assets = useAssetStore((s) => s.assets);
+  const createAsset = useAssetStore((s) => s.create);
+  const setAssetPremium = useAssetStore((s) => s.setPremium);
+  const catalogStickers = assets.filter((a) => a.type === "sticker");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Premium applies to catalog (uploaded) stickers only — bundled placeholders
+  // have no DB row to mark.
+  const selectedAsset = catalogStickers.find((a) => a.id === layer.assetId);
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const record = await uploadStickerAsset(file, createAsset);
+      beginHistory();
+      patch({ assetId: record.id });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha no upload.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Field label="Asset">
+      <select
+        value={layer.assetId}
+        onChange={(e) => {
+          beginHistory();
+          patch({ assetId: e.target.value });
+        }}
+        className={inputCls}
+      >
+        <optgroup label="Bundled">
+          {STICKER_ASSETS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </optgroup>
+        {catalogStickers.length > 0 && (
+          <optgroup label="Uploaded">
+            {catalogStickers.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={busy}
+        className="mt-1.5 w-full rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-50"
+      >
+        {busy ? "Uploading…" : "Upload sticker…"}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      {selectedAsset && (
+        <label
+          className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-400"
+          title="When on, this sticker is locked to paid plans in the app"
+        >
+          <input
+            type="checkbox"
+            checked={selectedAsset.premium}
+            onChange={(e) => setAssetPremium(selectedAsset.id, e.target.checked)}
+          />
+          Premium (paid plans only)
+        </label>
+      )}
       {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
     </Field>
   );
@@ -514,12 +640,7 @@ function LayerFields({ layer }: { layer: Layer }) {
     case "sticker":
       return (
         <>
-          <SelectField
-            label="Asset"
-            value={layer.assetId}
-            options={STICKER_ASSETS}
-            onCommit={(assetId) => patch({ assetId })}
-          />
+          <StickerField layer={layer} patch={patch} />
           {xy}
           <div className="grid grid-cols-2 gap-2">
             <NumberField label="Width" value={layer.width} onCommit={(width) => patch({ width })} min={1} />

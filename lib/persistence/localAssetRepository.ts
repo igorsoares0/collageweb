@@ -28,10 +28,20 @@ export class LocalStorageAssetRepository implements AssetRepository {
   async create(asset: NewAsset): Promise<AssetRecord> {
     const record: AssetRecord = {
       ...asset,
+      premium: asset.premium ?? false,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
     this.write([...this.read(), record]);
+    return record;
+  }
+
+  async setPremium(id: string, premium: boolean): Promise<AssetRecord> {
+    const assets = this.read();
+    const record = assets.find((a) => a.id === id);
+    if (!record) throw new Error(`Asset ${id} not found`);
+    record.premium = premium;
+    this.write(assets);
     return record;
   }
 
