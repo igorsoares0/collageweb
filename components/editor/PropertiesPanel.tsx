@@ -167,17 +167,34 @@ function FrameField({
   const assets = useAssetStore((s) => s.assets);
   const createAsset = useAssetStore((s) => s.create);
   const setAssetPremium = useAssetStore((s) => s.setPremium);
+  const removeAsset = useAssetStore((s) => s.remove);
   const frames = resolveFrames(assets);
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The premium toggle applies to catalog (uploaded) frames only — bundled
-  // seeds have no DB row to mark. So it shows only when the selected frame
+  // The premium/delete controls apply to catalog (uploaded) frames only —
+  // bundled seeds have no DB row. So they show only when the selected frame
   // resolves to an asset in the catalog.
   const selectedAsset = assets.find(
     (a) => a.id === layer.frameAssetId && a.type === "frame"
   );
+
+  // Deleting removes the frame from the shared catalog (every template loses
+  // it), so it's gated behind a confirm and clears this layer's reference.
+  const onDelete = async () => {
+    if (!selectedAsset) return;
+    if (
+      !window.confirm(
+        `Delete frame "${selectedAsset.name}" from the catalog? Any template using it loses it.`
+      )
+    ) {
+      return;
+    }
+    beginHistory();
+    patch({ frameAssetId: undefined });
+    await removeAsset(selectedAsset.id);
+  };
 
   // Snap the layer's height to the frame's aspect so it never stretches;
   // clearing the frame leaves the current dimensions alone.
@@ -255,17 +272,28 @@ function FrameField({
         }}
       />
       {selectedAsset && (
-        <label
-          className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-400"
-          title="When on, this frame is locked to paid plans in the app"
-        >
-          <input
-            type="checkbox"
-            checked={selectedAsset.premium}
-            onChange={(e) => setAssetPremium(selectedAsset.id, e.target.checked)}
-          />
-          Premium (paid plans only)
-        </label>
+        <>
+          <label
+            className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-400"
+            title="When on, this frame is locked to paid plans in the app"
+          >
+            <input
+              type="checkbox"
+              checked={selectedAsset.premium}
+              onChange={(e) =>
+                setAssetPremium(selectedAsset.id, e.target.checked)
+              }
+            />
+            Premium (paid plans only)
+          </label>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="mt-1.5 w-full rounded border border-zinc-800 px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 hover:border-red-900"
+          >
+            Delete from catalog
+          </button>
+        </>
       )}
       {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
     </Field>
@@ -288,14 +316,32 @@ function StickerField({
   const assets = useAssetStore((s) => s.assets);
   const createAsset = useAssetStore((s) => s.create);
   const setAssetPremium = useAssetStore((s) => s.setPremium);
+  const removeAsset = useAssetStore((s) => s.remove);
   const catalogStickers = assets.filter((a) => a.type === "sticker");
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Premium applies to catalog (uploaded) stickers only — bundled placeholders
-  // have no DB row to mark.
+  // Premium/delete apply to catalog (uploaded) stickers only — bundled
+  // placeholders have no DB row.
   const selectedAsset = catalogStickers.find((a) => a.id === layer.assetId);
+
+  // Deleting removes the sticker from the shared catalog, so it's confirmed and
+  // the layer falls back to the first bundled placeholder (assetId can't be
+  // left dangling — validate.ts requires a non-empty one).
+  const onDelete = async () => {
+    if (!selectedAsset) return;
+    if (
+      !window.confirm(
+        `Delete sticker "${selectedAsset.name}" from the catalog? Any template using it loses it.`
+      )
+    ) {
+      return;
+    }
+    beginHistory();
+    patch({ assetId: STICKER_ASSETS[0] });
+    await removeAsset(selectedAsset.id);
+  };
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
@@ -358,17 +404,28 @@ function StickerField({
         }}
       />
       {selectedAsset && (
-        <label
-          className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-400"
-          title="When on, this sticker is locked to paid plans in the app"
-        >
-          <input
-            type="checkbox"
-            checked={selectedAsset.premium}
-            onChange={(e) => setAssetPremium(selectedAsset.id, e.target.checked)}
-          />
-          Premium (paid plans only)
-        </label>
+        <>
+          <label
+            className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-400"
+            title="When on, this sticker is locked to paid plans in the app"
+          >
+            <input
+              type="checkbox"
+              checked={selectedAsset.premium}
+              onChange={(e) =>
+                setAssetPremium(selectedAsset.id, e.target.checked)
+              }
+            />
+            Premium (paid plans only)
+          </label>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="mt-1.5 w-full rounded border border-zinc-800 px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 hover:border-red-900"
+          >
+            Delete from catalog
+          </button>
+        </>
       )}
       {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
     </Field>
