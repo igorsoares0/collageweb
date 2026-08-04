@@ -63,7 +63,7 @@ export function proxy(request: NextRequest) {
     // Prompts the browser's native login dialog; it then re-sends the
     // credentials on every same-origin request, editor saves included.
     headers: {
-      "WWW-Authenticate": 'Basic realm="Collage Studio editor", charset="UTF-8"',
+      "WWW-Authenticate": 'Basic realm="Layer editor", charset="UTF-8"',
     },
   });
 }

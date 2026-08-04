@@ -76,7 +76,7 @@ export default function TemplateList() {
         <header className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Collage Studio
+              Layer Studio
             </h1>
             <p className="text-sm text-zinc-400 mt-1">
               Design templates for stories, posts and reels.

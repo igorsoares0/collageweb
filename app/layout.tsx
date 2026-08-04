@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Collage Studio",
+  title: "Layer Studio",
   description: "Visual template editor for social media content",
 };
 
