@@ -14,6 +14,12 @@ import type { NextRequest } from "next/server";
 
 const PUBLIC_API_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+// The legal pages themselves now live on the public marketing site; what is
+// left here are the redirects to them (see next.config.ts). Those still have
+// to answer without credentials — a 401 in front of a redirect is just a 401,
+// and Google Play requires the privacy policy URL to open for anyone.
+const PUBLIC_PAGES = new Set(["/privacy", "/terms"]);
+
 /// Constant-time credential check: comparing digests instead of strings
 /// equalises lengths, so timingSafeEqual never throws and never leaks how
 /// much of the password matched.
@@ -37,6 +43,11 @@ function authorized(request: NextRequest): boolean {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname.startsWith("/api/") && PUBLIC_API_METHODS.has(request.method)) {
+    return NextResponse.next();
+  }
+  // "/privacy/" reaches here before Next's trailing-slash redirect, so match
+  // the normalised path or the redirect itself would 401.
+  if (PUBLIC_PAGES.has(pathname.replace(/\/$/, ""))) {
     return NextResponse.next();
   }
   const configured =
