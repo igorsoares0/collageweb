@@ -109,14 +109,28 @@ export default function CanvasStage({ registerThumbnail }: Props) {
       try {
         // First panel only — the stage now spans every panel side by side,
         // and the gallery card shows a single page.
+        //
+        // Sized for what still consumes this: the template list on this site,
+        // and on the phone the placeholder before the live canvas appears and
+        // the fallback when a template cannot be loaded at all. The app card
+        // itself renders the real document now, so this no longer has to hold
+        // up at ~540 physical pixels — 240 did not, and that soft, blocky card
+        // next to a sharp preview is what sent us looking.
+        //
+        // It rides inside the templates list JSON as base64, and every
+        // template in the catalog is in one response, so the width is a real
+        // cost: measured on the published art, 360px/0.8 is ~46KB per
+        // template against ~17KB at 240px/0.7, while 480px/0.85 would be
+        // ~99KB. Serving thumbnails as their own URLs is what would lift this
+        // ceiling; until then it stays a thumbnail.
         return layer.toDataURL({
           x: 0,
           y: 0,
           width: w,
           height: h,
           mimeType: "image/jpeg",
-          quality: 0.7,
-          pixelRatio: 240 / w,
+          quality: 0.8,
+          pixelRatio: 360 / w,
         });
       } finally {
         chrome.forEach((n) => n.visible(true));
